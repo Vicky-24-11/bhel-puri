@@ -1,56 +1,89 @@
-# Welcome to your Expo app 👋
+# Bhel Puri — The Auction App 🍲🔨
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Welcome to **Bhel Puri**, a light, smooth, modern, and trustworthy quick-auction marketplace app. Sellers can list items for short-term auctions, and buyers can discover items, join the live bid streams, bid in real-time, and coordinate product handover through in-app chats upon winning.
 
-## Get started
+This project is built as a production-ready MVP from a single cross-platform codebase supporting **iOS, Android, and Web**.
 
-1. Install dependencies
+---
 
-   ```bash
-   npm install
-   ```
+## 🚀 Tech Stack
 
-2. Start the app
+- **Framework**: [React Native](https://reactnative.dev/) & [Expo](https://expo.dev/) (SDK 57)
+- **Routing**: [Expo Router](https://docs.expo.dev/router/introduction/) (File-based navigation)
+- **Styling**: [NativeWind (v4)](https://www.nativewind.dev/) (Tailwind CSS for React Native)
+- **State Management**: [Zustand](https://github.com/pmndrs/zustand)
+- **Data Fetching**: [TanStack Query](https://tanstack.com/query) (React Query)
+- **Form Management**: [React Hook Form](https://react-hook-form.com/) & [Zod](https://zod.dev/) validation
+- **Backend Services**: [Supabase](https://supabase.com/) (Auth, PostgreSQL DB, Realtime, RLS Policies)
+- **Animations**: [React Native Reanimated](https://docs.expo.dev/versions/latest/sdk/reanimated/)
 
-   ```bash
-   npx expo start
-   ```
+---
 
-In the output, you'll find options to open the app in a
+## 📁 Project Folder Structure
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+We use a clean, **feature-based architecture** under the `src` directory:
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```text
+├── assets/                  # App images, splash screen, icons
+├── supabase/                # Supabase database configurations
+│   └── migrations/          # ordered database SQL migrations
+└── src/
+    ├── app/                 # Expo Router routing directory
+    ├── components/          # Reusable shared UI layout components
+    │   └── ui/              # Atom level elements (Button, Card, Input...)
+    ├── design-system/       # Centralized theme tokens (theme.ts)
+    ├── features/            # Feature-specific business logic & UI
+    │   ├── auth/            # OTP & Google Sign-In pages
+    │   ├── auctions/        # Listing cards, countdowns, bid feeds
+    │   ├── chat/            # Post-auction buyer/seller messenger
+    │   ├── profile/         # User rating card and creation metrics
+    │   └── ...              # Other core capabilities (ratings, reports)
+    ├── hooks/               # Custom cross-cutting hooks
+    ├── lib/                 # Third-party initializations (supabase.ts)
+    ├── services/            # Supabase API access layer
+    └── types/               # TypeScript interface and type files
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+---
 
-### Other setup steps
+## 🛠️ Getting Started
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+### 1. Prerequisites
+Ensure you have [Node.js](https://nodejs.org/) installed (v18+ recommended) and the Expo CLI configured.
 
-## Learn more
+### 2. Set Up Environment Variables
+Copy `.env.example` to `.env` and fill in your Supabase project parameters:
+```bash
+cp .env.example .env
+```
+Modify `.env`:
+```text
+EXPO_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-publishable-anon-key
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+### 3. Install Dependencies
+```bash
+npm install
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### 4. Run the Dev Server
+```bash
+# Start Metro bundler (supporting all devices)
+npx expo start
 
-## Join the community
+# Run specifically on target platforms
+npm run ios     # Open in iOS Simulator
+npm run android # Open in Android Emulator
+npm run web     # Open in Web Browser (Localhost)
+```
 
-Join our community of developers creating universal apps.
+---
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## 📚 Technical Documentation
+
+For details on the architecture, setup instructions, and database details, see the following:
+*   [ARCHITECTURE.md](file:///Users/vikaspandey/Documents/Bhel%20Puri/ARCHITECTURE.md) - System architecture and component layouts.
+*   [SUPABASE_SETUP.md](file:///Users/vikaspandey/Documents/Bhel%20Puri/SUPABASE_SETUP.md) - Setting up Supabase, storage, and SQL migrations.
+*   [ENVIRONMENT.md](file:///Users/vikaspandey/Documents/Bhel%20Puri/ENVIRONMENT.md) - App parameters and key settings.
+*   [AUCTION_RULES.md](file:///Users/vikaspandey/Documents/Bhel%20Puri/AUCTION_RULES.md) - Authoritative rules engine and anti-sniping rules.
