@@ -1,21 +1,13 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable, Alert, Platform } from 'react-native';
+import { View, Text, ScrollView, Pressable, Alert, Platform, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { User, ShieldCheck, Star, Settings, Gavel, LogOut, ChevronRight } from 'lucide-react-native';
-import { router } from 'expo-router';
-
+import { User, ShieldCheck, Star, Settings, Gavel, LogOut, ChevronRight, MapPin } from 'lucide-react-native';
 import { Button } from '@/components/ui/Button';
+import { useAuth } from '@/lib/AuthContext';
+import { signOut } from '@/services/authService';
 
 export default function ProfileScreen() {
-  const user = {
-    name: 'Vikas Pandey',
-    email: 'vikas@bhelpuri.app',
-    rating: 4.9,
-    dealsCount: 12,
-    auctionsWon: 3,
-    auctionsCreated: 7,
-    isVerified: true,
-  };
+  const { user, profile } = useAuth();
 
   const handleMenuPress = (label: string) => {
     const msg = `This launches the "${label}" interface, synchronized via Supabase in production.`;
@@ -27,19 +19,24 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = () => {
-    const action = () => {
-      const resetMsg = 'Session cleared. In production, this redirects to the Auth/Welcome screen.';
-      if (Platform.OS === 'web') {
-        window.alert(`Bhel Puri: ${resetMsg}`);
-      } else {
-        Alert.alert('Logged Out', resetMsg);
+    const action = async () => {
+      try {
+        await signOut();
+        // Success: session listener updates AuthContext to SIGNED_OUT, 
+        // root layout detects state and redirects to welcome screen automatically.
+      } catch (err: any) {
+        console.error('Logout error:', err);
+        const errMsg = err.message || 'Failed to sign out. Please try again.';
+        if (Platform.OS === 'web') {
+          window.alert(errMsg);
+        } else {
+          Alert.alert('Error', errMsg);
+        }
       }
-      // Redirect to home tab
-      router.replace('/(tabs)');
     };
 
     if (Platform.OS === 'web') {
-      if (window.confirm('Are you sure you want to log out?')) {
+      if (window.confirm('Are you sure you want to log out of Bhel Puri?')) {
         action();
       }
     } else {
@@ -55,8 +52,8 @@ export default function ProfileScreen() {
   };
 
   const menuItems = [
-    { label: 'My Active Listings', count: 3, icon: Gavel },
-    { label: 'Won Handover Coordinates', count: 2, icon: ShieldCheck },
+    { label: 'My Active Listings', count: 0, icon: Gavel },
+    { label: 'Won Handover Coordinates', count: 0, icon: ShieldCheck },
     { label: 'Account Settings', icon: Settings },
   ];
 
@@ -81,24 +78,49 @@ export default function ProfileScreen() {
           {/* User Hero Section Card */}
           <View className="w-full bg-white border border-stone-200 rounded-3xl p-5 mb-6 shadow-sm items-center">
             {/* Large Avatar */}
-            <View 
-              style={{ backgroundColor: 'rgba(255, 107, 53, 0.1)', borderColor: 'rgba(255, 107, 53, 0.25)' }}
-              className="w-20 h-20 border rounded-full items-center justify-center mb-3"
-            >
-              <User size={40} color="#FF6B35" />
-            </View>
+            {profile?.avatar_url || user?.user_metadata?.avatar_url ? (
+              <Image
+                source={{ uri: profile?.avatar_url || user?.user_metadata?.avatar_url }}
+                className="w-20 h-20 rounded-full mb-3 border border-stone-200"
+              />
+            ) : (
+              <View 
+                style={{ backgroundColor: 'rgba(255, 107, 53, 0.1)', borderColor: 'rgba(255, 107, 53, 0.25)' }}
+                className="w-20 h-20 border rounded-full items-center justify-center mb-3"
+              >
+                <User size={40} color="#FF6B35" />
+              </View>
+            )}
 
             {/* Name and Verification Badge */}
             <View className="flex-row items-center justify-center gap-1.5 mb-1">
               <Text className="text-xl font-display font-extrabold text-brand-text">
-                {user.name}
+                {profile?.full_name || 'Bhel Puri Bidder'}
               </Text>
-              {user.isVerified && <ShieldCheck size={18} color="#2EC4B6" fill="#2EC4B6" fillOpacity={0.2} />}
+              {profile?.is_verified && <ShieldCheck size={18} color="#2EC4B6" fill="#2EC4B6" fillOpacity={0.2} />}
             </View>
 
-            <Text className="text-sm font-display text-brand-muted mb-3">
-              {user.email}
+            <Text className="text-sm font-display text-brand-muted mb-1">
+              @{profile?.username || 'bidder'}
             </Text>
+            {user?.email ? (
+              <Text className="text-xs font-display text-brand-muted mb-3">
+                {user.email}
+              </Text>
+            ) : null}
+            
+            <Text className="text-xs font-display text-brand-muted mb-4 text-center px-4 leading-relaxed">
+              {profile?.bio || 'No bio provided yet.'}
+            </Text>
+
+            {profile?.location ? (
+              <View className="flex-row items-center mb-4">
+                <MapPin size={12} color="#7F8C8D" className="mr-1" />
+                <Text className="text-xs font-display text-brand-muted">
+                  {profile.location}
+                </Text>
+              </View>
+            ) : null}
 
             {/* Star Ratings */}
             <View 
@@ -107,7 +129,7 @@ export default function ProfileScreen() {
             >
               <Star size={14} color="#FFB627" fill="#FFB627" className="mr-1" />
               <Text className="text-xs font-display font-bold text-brand-text">
-                {user.rating} Seller Rating ({user.dealsCount} deals)
+                {profile?.rating || '0.00'} Seller Rating ({profile?.total_ratings || 0} deals)
               </Text>
             </View>
 
@@ -115,7 +137,7 @@ export default function ProfileScreen() {
             <View className="w-full flex-row justify-around border-t border-stone-100 pt-4">
               <View className="items-center">
                 <Text className="text-xl font-display font-extrabold text-brand-text">
-                  {user.auctionsCreated}
+                  0
                 </Text>
                 <Text className="text-[10px] font-display text-brand-muted uppercase font-semibold mt-0.5">
                   Created
@@ -126,7 +148,7 @@ export default function ProfileScreen() {
 
               <View className="items-center">
                 <Text className="text-xl font-display font-extrabold text-brand-text">
-                  {user.auctionsWon}
+                  0
                 </Text>
                 <Text className="text-[10px] font-display text-brand-muted uppercase font-semibold mt-0.5">
                   Won
@@ -160,7 +182,7 @@ export default function ProfileScreen() {
                   </View>
 
                   <View className="flex-row items-center gap-1">
-                    {item.count !== undefined && (
+                    {item.count !== undefined && item.count > 0 && (
                       <View className="bg-stone-100 px-2 py-0.5 rounded-full">
                         <Text className="text-xs font-display text-brand-muted font-bold">
                           {item.count}
