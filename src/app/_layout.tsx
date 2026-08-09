@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useColorScheme, View, Text } from 'react-native';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useSegments, useRouter } from 'expo-router';
@@ -26,6 +26,11 @@ function InnerLayout() {
   const { authState } = useAuth();
   const segments = useSegments() as string[];
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     // Hide splash screen when session restoration status completes
@@ -39,6 +44,7 @@ function InnerLayout() {
 
   useEffect(() => {
     if (authState === 'INITIALIZING') return;
+    if (segments.length === 0) return;
 
     const firstSegment = segments[0] as string;
     const inAuthGroup = 
@@ -57,14 +63,14 @@ function InnerLayout() {
       router.replace('/profile-setup');
     } else if (
       (authState === 'PROFILE_COMPLETE' || authState === 'SIGNED_IN') && 
-      (inAuthGroup || inProfileSetup || segments.length === 0 || firstSegment === 'index')
+      (inAuthGroup || inProfileSetup)
     ) {
       // Redirect successfully authenticated and completed profiles to marketplace
       router.replace('/(tabs)');
     }
   }, [authState, segments, router]);
 
-  if (authState === 'INITIALIZING') {
+  if (authState === 'INITIALIZING' || !mounted) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FDFBF7' }}>
         <LoadingState variant="spinner" />

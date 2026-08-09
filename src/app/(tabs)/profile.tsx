@@ -1,7 +1,9 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable, Alert, Platform, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { User, ShieldCheck, Star, Settings, Gavel, LogOut, ChevronRight, MapPin } from 'lucide-react-native';
+import { User, ShieldCheck, Star, Gavel, LogOut, ChevronRight, MapPin } from 'lucide-react-native';
+import { router } from 'expo-router';
+
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/AuthContext';
 import { signOut } from '@/services/authService';
@@ -22,8 +24,6 @@ export default function ProfileScreen() {
     const action = async () => {
       try {
         await signOut();
-        // Success: session listener updates AuthContext to SIGNED_OUT, 
-        // root layout detects state and redirects to welcome screen automatically.
       } catch (err: any) {
         console.error('Logout error:', err);
         const errMsg = err.message || 'Failed to sign out. Please try again.';
@@ -52,9 +52,9 @@ export default function ProfileScreen() {
   };
 
   const menuItems = [
-    { label: 'My Active Listings', count: 0, icon: Gavel },
-    { label: 'Won Handover Coordinates', count: 0, icon: ShieldCheck },
-    { label: 'Account Settings', icon: Settings },
+    { label: 'Edit Profile', icon: User, action: () => router.push('/edit-profile' as any) },
+    { label: 'My Active Listings', icon: Gavel, action: () => router.push('/my-auctions' as any) },
+    { label: 'Won Handover Coordinates', count: 0, icon: ShieldCheck, action: () => handleMenuPress('Won Handover Coordinates') },
   ];
 
   return (
@@ -113,25 +113,37 @@ export default function ProfileScreen() {
               {profile?.bio || 'No bio provided yet.'}
             </Text>
 
-            {profile?.location ? (
+            {profile?.city ? (
               <View className="flex-row items-center mb-4">
                 <MapPin size={12} color="#7F8C8D" className="mr-1" />
                 <Text className="text-xs font-display text-brand-muted">
-                  {profile.location}
+                  {profile.city}
                 </Text>
               </View>
             ) : null}
 
-            {/* Star Ratings */}
-            <View 
-              style={{ backgroundColor: 'rgba(255, 182, 39, 0.15)' }}
-              className="flex-row items-center px-3 py-1.5 rounded-full mb-5"
-            >
-              <Star size={14} color="#FFB627" fill="#FFB627" className="mr-1" />
-              <Text className="text-xs font-display font-bold text-brand-text">
-                {profile?.rating || '0.00'} Seller Rating ({profile?.total_ratings || 0} deals)
-              </Text>
-            </View>
+            {/* Star Ratings Empty State Check */}
+            {profile?.total_ratings && profile.total_ratings > 0 ? (
+              <View 
+                style={{ backgroundColor: 'rgba(255, 182, 39, 0.15)' }}
+                className="flex-row items-center px-3 py-1.5 rounded-full mb-5"
+              >
+                <Star size={14} color="#FFB627" fill="#FFB627" className="mr-1" />
+                <Text className="text-xs font-display font-bold text-brand-text">
+                  {profile?.rating || '0.00'} Seller Rating ({profile?.total_ratings} deals)
+                </Text>
+              </View>
+            ) : (
+              <View 
+                style={{ backgroundColor: 'rgba(127, 140, 141, 0.08)' }}
+                className="flex-row items-center px-3 py-1.5 rounded-full mb-5"
+              >
+                <Star size={14} color="#7F8C8D" className="mr-1" />
+                <Text className="text-xs font-display font-semibold text-brand-muted">
+                  No ratings yet (0 deals)
+                </Text>
+              </View>
+            )}
 
             {/* Stats row */}
             <View className="w-full flex-row justify-around border-t border-stone-100 pt-4">
@@ -164,7 +176,7 @@ export default function ProfileScreen() {
               return (
                 <Pressable
                   key={idx}
-                  onPress={() => handleMenuPress(item.label)}
+                  onPress={item.action}
                   className={`flex-row items-center justify-between p-4.5 ${
                     idx < menuItems.length - 1 ? 'border-b border-stone-100' : ''
                   } active:bg-stone-50`}
