@@ -140,10 +140,10 @@ export async function getRecentAuctions(): Promise<Auction[]> {
 /**
  * Retrieves details of a specific auction by ID, including its seller profile and images.
  */
-export async function getAuctionById(id: string): Promise<(Auction & { seller: any; images: AuctionImage[] }) | null> {
+export async function getAuctionById(id: string): Promise<(Auction & { seller: any; winner?: any; images: AuctionImage[] }) | null> {
   const { data: auction, error: aucError } = await supabase
     .from('auctions')
-    .select('*, seller:profiles!auctions_seller_id_fkey(*), images:auction_images(*)')
+    .select('*, seller:profiles!auctions_seller_id_fkey(*), winner:profiles!auctions_winner_id_fkey(*), images:auction_images(*)')
     .eq('id', id)
     .single();
 

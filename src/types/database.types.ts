@@ -36,6 +36,7 @@ export interface Auction {
   starts_at: string;
   ends_at: string;
   status: AuctionStatus;
+  highest_bidder_id?: string | null;
   winner_id: string | null;
   created_at: string;
   updated_at: string;
@@ -49,4 +50,29 @@ export interface AuctionImage {
   storage_path: string;
   display_order: number;
   created_at: string;
+}
+
+export type ParticipantStatus = 'active' | 'left' | 'winner' | 'lost';
+
+export interface AuctionParticipant {
+  id: string;
+  auction_id: string;
+  user_id: string;
+  status: ParticipantStatus;
+  joined_at: string;
+  left_at: string | null;
+  created_at: string;
+}
+
+export interface Bid {
+  id: string;
+  auction_id: string;
+  bidder_id: string;
+  amount: number;
+  created_at: string;
+  bidder?: {
+    username: string;
+    avatar_url: string | null;
+    full_name: string | null;
+  } | null;
 }
