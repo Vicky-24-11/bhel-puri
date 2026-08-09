@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Heart, Bell, MessageSquare, ArrowUpRight, Award } from 'lucide-react-native';
 
-import { mockAuctions } from '@/mocks/auctions';
+import { useAuth } from '@/lib/AuthContext';
+import { getWatchlist } from '@/services/auctionService';
+import { getCategories } from '@/services/categoryService';
+import { Auction, Category } from '@/types/database.types';
 import { AuctionCard } from '@/components/ui/AuctionCard';
 
 interface NotificationItem {
@@ -16,7 +19,13 @@ interface NotificationItem {
 }
 
 export default function ActivityScreen() {
+  const { user } = useAuth();
   const [activeSegment, setActiveSegment] = useState<'watchlist' | 'alerts'>('watchlist');
+
+  // Watchlist states
+  const [watchlistItems, setWatchlistItems] = useState<Auction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadingWatchlist, setLoadingWatchlist] = useState(true);
 
   // Static mock notifications
   const notifications: NotificationItem[] = [
@@ -54,6 +63,28 @@ export default function ActivityScreen() {
     }
   ];
 
+  const fetchWatchlistData = React.useCallback(async () => {
+    if (!user) return;
+    try {
+      const [list, cats] = await Promise.all([
+        getWatchlist(user.id),
+        getCategories()
+      ]);
+      setWatchlistItems(list);
+      setCategories(cats);
+    } catch (err) {
+      console.error('Error fetching watchlist data:', err);
+    } finally {
+      setLoadingWatchlist(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchWatchlistData();
+    }
+  }, [user, fetchWatchlistData]);
+
   const renderNotificationIcon = (type: NotificationItem['type']) => {
     switch (type) {
       case 'outbid':
@@ -63,118 +94,138 @@ export default function ActivityScreen() {
       case 'message':
         return <MessageSquare size={18} color="#FFB627" />;
       case 'ending':
-        return <ClockIcon size={18} color="#FF6B35" />;
+        return <Heart size={18} color="#FF6B35" />;
     }
   };
 
-  // Minimal wrapper since Clock icon is simple
-  const ClockIcon = ({ size, color }: { size: number; color: string }) => (
-    <View className="items-center justify-center">
-      <Heart size={size} color={color} />
-    </View>
-  );
-
   return (
     <SafeAreaView className="flex-1 bg-brand-background">
-      {/* Tab Segment Switcher Header */}
-      <View className="px-5 pt-3 pb-2 border-b border-stone-200">
-        <View className="flex-row bg-stone-100 rounded-xl p-1 mb-2">
+      {/* Segment tabs */}
+      <View className="px-5 pt-3 pb-2 border-b border-stone-200 bg-white">
+        <View className="flex-row bg-stone-100 rounded-xl p-1 mb-1">
           <Pressable
             onPress={() => setActiveSegment('watchlist')}
-            className={`flex-1 flex-row items-center justify-center py-2.5 rounded-lg ${
-              activeSegment === 'watchlist' ? 'bg-white shadow-sm' : 'bg-transparent'
-            }`}
+            style={
+              activeSegment === 'watchlist'
+                ? {
+                    backgroundColor: '#FFFFFF',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 1.5,
+                    elevation: 2,
+                  }
+                : { backgroundColor: 'transparent' }
+            }
+            className="flex-1 flex-row items-center justify-center py-2.5 rounded-lg"
           >
             <Heart size={16} color={activeSegment === 'watchlist' ? '#FF6B35' : '#7F8C8D'} className="mr-1.5" />
-            <Text
-              className={`text-sm font-display font-bold ${
-                activeSegment === 'watchlist' ? 'text-brand-text' : 'text-brand-muted'
-              }`}
-            >
+            <Text className={`text-sm font-display font-bold ${activeSegment === 'watchlist' ? 'text-brand-text' : 'text-brand-muted'}`}>
               Watchlist
             </Text>
           </Pressable>
 
           <Pressable
             onPress={() => setActiveSegment('alerts')}
-            className={`flex-1 flex-row items-center justify-center py-2.5 rounded-lg ${
-              activeSegment === 'alerts' ? 'bg-white shadow-sm' : 'bg-transparent'
-            }`}
+            style={
+              activeSegment === 'alerts'
+                ? {
+                    backgroundColor: '#FFFFFF',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 1.5,
+                    elevation: 2,
+                  }
+                : { backgroundColor: 'transparent' }
+            }
+            className="flex-1 flex-row items-center justify-center py-2.5 rounded-lg"
           >
             <Bell size={16} color={activeSegment === 'alerts' ? '#FF6B35' : '#7F8C8D'} className="mr-1.5" />
-            <Text
-              className={`text-sm font-display font-bold ${
-                activeSegment === 'alerts' ? 'text-brand-text' : 'text-brand-muted'
-              }`}
-            >
+            <Text className={`text-sm font-display font-bold ${activeSegment === 'alerts' ? 'text-brand-text' : 'text-brand-muted'}`}>
               Alerts
             </Text>
           </Pressable>
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
-        <View className="w-full max-w-5xl mx-auto px-5 pt-4 pb-12">
-          
-          {/* WATCHLIST STREAM */}
-          {activeSegment === 'watchlist' && (
-            <View>
-              <Text className="text-lg font-display font-bold text-brand-text mb-4">
-                Saved Live Auctions
+      {/* Content area */}
+      {activeSegment === 'watchlist' ? (
+        loadingWatchlist ? (
+          <View className="flex-1 items-center justify-center">
+            <ActivityIndicator size="small" color="#FF6B35" />
+          </View>
+        ) : watchlistItems.length === 0 ? (
+          <ScrollView className="flex-1 pt-20 px-6">
+            <View className="items-center py-16 bg-white rounded-3xl border border-stone-200 shadow-sm px-6">
+              <View className="w-16 h-16 rounded-full bg-brand-primary/10 items-center justify-center mb-4">
+                <Heart size={32} color="#FF6B35" />
+              </View>
+              <Text className="text-lg font-display font-bold text-brand-text mb-1 text-center">
+                Your Watchlist is Empty
               </Text>
-              
-              <View className="flex-row flex-wrap justify-between">
-                {/* For demonstration, display first two mock items */}
-                {mockAuctions.slice(0, 2).map((auc) => (
-                  <View key={auc.id} className="w-full sm:w-[48%] md:w-[31%] mb-2">
-                    <AuctionCard {...auc} />
-                  </View>
-                ))}
+              <Text className="text-sm font-display text-brand-muted text-center max-w-xs leading-relaxed">
+                {"Save auctions you're interested in by tapping the heart icon on any listing card."}
+              </Text>
+            </View>
+          </ScrollView>
+        ) : (
+          <FlatList
+            data={watchlistItems}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={{ padding: 20 }}
+            renderItem={({ item }) => (
+              <AuctionCard
+                id={item.id}
+                title={item.title}
+                current_price={item.current_price}
+                ends_at={item.ends_at}
+                starts_at={item.starts_at}
+                category_name={categories.find((c) => c.id === item.category_id)?.name}
+                status={item.status}
+                bid_count={0}
+                primary_image_url={item.primary_image_url}
+              />
+            )}
+          />
+        )
+      ) : (
+        <ScrollView className="flex-1" contentContainerStyle={{ padding: 20 }}>
+          <Text className="text-lg font-display font-bold text-brand-text mb-4">
+            Recent Activities
+          </Text>
+
+          {notifications.map((notif) => (
+            <View
+              key={notif.id}
+              style={
+                notif.read
+                  ? { borderColor: '#E5E7EB', opacity: 0.8 }
+                  : { borderColor: 'rgba(255, 107, 53, 0.15)', backgroundColor: 'rgba(255, 107, 53, 0.04)' }
+              }
+              className="w-full flex-row items-start p-4 mb-3 border rounded-2xl bg-white shadow-sm"
+            >
+              <View className="w-9 h-9 rounded-full bg-stone-100 items-center justify-center mr-3 mt-0.5">
+                {renderNotificationIcon(notif.type)}
+              </View>
+
+              <View className="flex-1">
+                <View className="flex-row justify-between items-center mb-1">
+                  <Text className={`font-display text-sm ${notif.read ? 'font-semibold text-brand-text' : 'font-bold text-brand-text'}`}>
+                    {notif.title}
+                  </Text>
+                  <Text className="text-[10px] font-display text-brand-muted">
+                    {notif.time}
+                  </Text>
+                </View>
+                <Text className="text-xs font-display text-brand-muted leading-relaxed">
+                  {notif.body}
+                </Text>
               </View>
             </View>
-          )}
-
-          {/* ALERTS / NOTIFICATIONS FEED */}
-          {activeSegment === 'alerts' && (
-            <View>
-              <Text className="text-lg font-display font-bold text-brand-text mb-4">
-                Recent Activities
-              </Text>
-
-              {notifications.map((notif) => (
-                <View
-                  key={notif.id}
-                  style={
-                    notif.read
-                      ? { borderColor: '#F5F5F5', opacity: 0.8 }
-                      : { borderColor: 'rgba(255, 107, 53, 0.15)', backgroundColor: 'rgba(255, 107, 53, 0.04)' }
-                  }
-                  className="w-full flex-row items-start p-4 mb-3 border rounded-2xl bg-white shadow-sm"
-                >
-                  <View className="w-9 h-9 rounded-full bg-stone-100 items-center justify-center mr-3 mt-0.5">
-                    {renderNotificationIcon(notif.type)}
-                  </View>
-
-                  <View className="flex-1">
-                    <View className="flex-row justify-between items-center mb-1">
-                      <Text className={`font-display text-sm ${notif.read ? 'font-semibold text-brand-text' : 'font-bold text-brand-text'}`}>
-                        {notif.title}
-                      </Text>
-                      <Text className="text-[10px] font-display text-brand-muted">
-                        {notif.time}
-                      </Text>
-                    </View>
-                    <Text className="text-xs font-display text-brand-muted leading-relaxed">
-                      {notif.body}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-
-        </View>
-      </ScrollView>
+          ))}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }

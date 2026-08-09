@@ -39,9 +39,9 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="auctions"
+        name="explore"
         options={{
-          title: 'Auctions',
+          title: 'Explore',
           tabBarIcon: ({ color, size }) => <Gavel color={color} size={size} />,
         }}
       />

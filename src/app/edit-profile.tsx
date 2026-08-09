@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, Alert, Platform, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, Alert, Platform, Image, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { User, ShieldCheck, MapPin, AlignLeft } from 'lucide-react-native';
+import { router } from 'expo-router';
+import { User, ShieldCheck, MapPin, AlignLeft, ArrowLeft } from 'lucide-react-native';
 
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/lib/AuthContext';
-import { supabase } from '@/lib/supabase';
-import { signOut } from '@/services/authService';
+import { updateProfile, isUsernameAvailable } from '@/services/profileService';
 
-export default function ProfileSetupScreen() {
+export default function EditProfileScreen() {
   const { user, profile, refreshProfile } = useAuth();
 
   const [fullName, setFullName] = useState('');
@@ -21,22 +21,15 @@ export default function ProfileSetupScreen() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Prefill fields with existing profile data or user email metadata on mount
-  React.useEffect(() => {
+  useEffect(() => {
     if (profile) {
       setFullName(profile.full_name || '');
       setUsername(profile.username || '');
       setBio(profile.bio || '');
       setCity(profile.city || '');
-      setAvatarUrl(profile.avatar_url || user?.user_metadata?.avatar_url || '');
-    } else if (user) {
-      const emailPrefix = user.email ? user.email.split('@')[0].replace(/[^a-z0-9_]/g, '') : '';
-      setUsername(emailPrefix);
-      setFullName(user.user_metadata?.full_name || emailPrefix);
-      setCity(user.user_metadata?.city || '');
-      setAvatarUrl(user.user_metadata?.avatar_url || '');
+      setAvatarUrl(profile.avatar_url || '');
     }
-  }, [profile, user]);
+  }, [profile]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -60,90 +53,53 @@ export default function ProfileSetupScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSaveProfile = async () => {
+  const handleSaveChanges = async () => {
     if (!validateForm() || !user) return;
 
     setLoading(true);
     const cleanUsername = username.trim().toLowerCase();
     
     try {
-      // 1. Verify username availability (exclude current user)
-      const { data: existingUser, error: checkError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('username', cleanUsername)
-        .neq('id', user.id);
-        
-      if (checkError) {
-        if (checkError.code === 'PGRST205' || checkError.code === '42P01') {
-          throw new Error('Database tables are missing. Please run the SQL migrations from your supabase/migrations/ folder in your Supabase SQL Editor (see docs/SUPABASE_SETUP.md).');
+      // 1. Verify username availability if it changed
+      if (profile && cleanUsername !== profile.username) {
+        const available = await isUsernameAvailable(cleanUsername, user.id);
+        if (!available) {
+          setErrors((prev) => ({
+            ...prev,
+            username: 'That username is already taken. Please choose another one.'
+          }));
+          setLoading(false);
+          return;
         }
-        throw checkError;
       }
 
-      if (existingUser && existingUser.length > 0) {
-        setErrors((prev) => ({
-          ...prev,
-          username: 'That username is already taken. Please choose another one.'
-        }));
-        setLoading(false);
-        return;
-      }
+      // 2. Write updates to the profile database row using service module
+      await updateProfile({
+        id: user.id,
+        full_name: fullName.trim(),
+        username: cleanUsername,
+        bio: bio.trim(),
+        city: city.trim(),
+        avatar_url: avatarUrl,
+      });
 
-      // 2. Write upsert to create or update the profile database row (including avatar_url and city)
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          full_name: fullName.trim(),
-          username: cleanUsername,
-          bio: bio.trim(),
-          city: city.trim(),
-          avatar_url: avatarUrl,
-          is_profile_completed: true,
-          updated_at: new Date().toISOString(),
-        });
-
-      if (updateError) {
-        if (updateError.code === 'PGRST205' || updateError.code === '42P01') {
-          throw new Error('Database tables are missing. Please run the SQL migrations from your supabase/migrations/ folder in your Supabase SQL Editor.');
-        }
-        throw updateError;
-      }
-
-      // 3. Sync Auth State
+      // 3. Sync Auth State & return to profile screen
       await refreshProfile();
       
-      const successMsg = 'Your profile is set up! Welcome to Bhel Puri.';
+      const successMsg = 'Your profile modifications have been saved.';
       if (Platform.OS === 'web') {
         window.alert(successMsg);
       } else {
-        Alert.alert('Profile Complete', successMsg);
+        Alert.alert('Profile Saved', successMsg);
       }
+      router.back();
     } catch (error: any) {
-      console.error('Profile setup failed:', error);
-      const errAlert = error.message || 'Failed to save profile. Please try again.';
+      console.error('Profile modification failed:', error);
+      const errAlert = error.message || 'Something went wrong. Please try again.';
       if (Platform.OS === 'web') {
         window.alert(errAlert);
       } else {
-        Alert.alert('Setup Failed', errAlert);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      setLoading(true);
-      await signOut();
-    } catch (err: any) {
-      console.error('Logout error:', err);
-      const errMsg = err.message || 'Failed to sign out. Please try again.';
-      if (Platform.OS === 'web') {
-        window.alert(errMsg);
-      } else {
-        Alert.alert('Error', errMsg);
+        Alert.alert('Save Failed', errAlert);
       }
     } finally {
       setLoading(false);
@@ -152,17 +108,27 @@ export default function ProfileSetupScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-brand-background">
-      <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
-        <View className="px-6 py-8 max-w-lg mx-auto w-full gap-6">
-          <View>
-            <Text className="text-3xl font-display font-extrabold text-brand-text tracking-tight">
-              Complete your profile
-            </Text>
-            <Text className="text-sm font-display text-brand-muted mt-2">
-              Choose your display credentials to begin bidding.
-            </Text>
-          </View>
+      {/* Header with back button */}
+      <View className="px-5 pt-3 pb-2 flex-row items-center border-b border-stone-200 gap-3">
+        <Pressable
+          onPress={() => router.back()}
+          className="w-10 h-10 items-center justify-center bg-white border border-stone-200 rounded-full shadow-sm active:bg-stone-50"
+        >
+          <ArrowLeft size={20} color="#1A1A1A" />
+        </Pressable>
+        <View>
+          <Text className="text-xl font-display font-extrabold text-brand-text">
+            Edit Profile
+          </Text>
+          <Text className="text-xs font-display text-brand-muted">
+            Update your public credentials
+          </Text>
+        </View>
+      </View>
 
+      <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
+        <View className="px-6 py-6 max-w-lg mx-auto w-full gap-6">
+          
           {/* Avatar Preview */}
           {avatarUrl ? (
             <View className="items-center my-2">
@@ -196,7 +162,7 @@ export default function ProfileSetupScreen() {
               autoCorrect={false}
               value={username}
               onChangeText={(text) => {
-                setUsername(text.replace(/\s/g, '')); // remove spaces in real-time
+                setUsername(text.replace(/\s/g, ''));
                 if (errors.username) {
                   setErrors((prev) => {
                     const next = { ...prev };
@@ -232,16 +198,9 @@ export default function ProfileSetupScreen() {
           {/* Action Buttons */}
           <View className="gap-2 mt-4">
             <Button
-              label="Save & Continue"
-              onPress={handleSaveProfile}
+              label="Save Changes"
+              onPress={handleSaveChanges}
               loading={loading}
-            />
-
-            <Button
-              label="Log Out / Cancel"
-              variant="outline"
-              onPress={handleLogout}
-              className="border-brand-error/20 active:bg-red-50"
             />
           </View>
         </View>

@@ -23,7 +23,8 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
         return false;
       }
 
-      const hours = Math.floor(difference / (1000 * 60 * 60));
+      const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
       const minutes = Math.floor((difference / 1000 / 60) % 60);
       const seconds = Math.floor((difference / 1000) % 60);
 
@@ -34,7 +35,9 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
       const formattedMinutes = minutes.toString().padStart(2, '0');
       const formattedSeconds = seconds.toString().padStart(2, '0');
 
-      if (hours > 0) {
+      if (days > 0) {
+        setTimeLeft(`${days}d ${formattedHours}h ${formattedMinutes}m`);
+      } else if (hours > 0) {
         setTimeLeft(`${formattedHours}h ${formattedMinutes}m ${formattedSeconds}s`);
       } else {
         setTimeLeft(`${formattedMinutes}m ${formattedSeconds}s`);
