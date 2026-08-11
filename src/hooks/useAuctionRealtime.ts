@@ -81,26 +81,52 @@ export function useAuctionRealtime(auctionId: string) {
     const channel = subscribeToAuction(auctionId, {
       onPriceUpdate: (payload) => {
         if (!active) return;
-        setAuction((prev) => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            current_price: payload.current_price,
-            highest_bidder_id: payload.highest_bidder_id,
-            status: payload.status as any,
-            winner_id: payload.winner_id,
-            ends_at: payload.ends_at,
-          };
-        });
+        console.log(`[Realtime][Auction Update] Received update payload:`, payload);
+        if (payload) {
+          setAuction((prev) => {
+            if (!prev) return null;
+            // Prevent overwriting with older state if events are received out-of-order
+            if (Number(payload.current_price) >= prev.current_price) {
+              console.log(`[Realtime][Current Price] Updating current price to ₹${payload.current_price} from auction update`);
+              return {
+                ...prev,
+                current_price: Number(payload.current_price),
+                highest_bidder_id: payload.highest_bidder_id,
+                status: payload.status as any,
+                winner_id: payload.winner_id,
+                ends_at: payload.ends_at,
+              };
+            }
+            return prev;
+          });
+        }
       },
-      onNewBid: () => {
+      onNewBid: (newBid) => {
         if (!active) return;
+        console.log(`[Realtime][Bid Insert] Received bid payload:`, newBid);
+        
         // Query the bids table dynamically to include bidder names/avatars
         getBids(auctionId, 30)
           .then((newBids) => {
             if (active) setBids(newBids);
           })
           .catch((err) => console.error('Error updating realtime bids list:', err.message));
+
+        // Update current price if new bid is greater than local current price
+        if (newBid) {
+          setAuction((prev) => {
+            if (!prev) return null;
+            if (Number(newBid.amount) > prev.current_price) {
+              console.log(`[Realtime][Current Price] Updating current price to ₹${newBid.amount} from bid insert`);
+              return {
+                ...prev,
+                current_price: Number(newBid.amount),
+                highest_bidder_id: newBid.bidder_id,
+              };
+            }
+            return prev;
+          });
+        }
       },
       onParticipantChange: () => {
         if (!active) return;
