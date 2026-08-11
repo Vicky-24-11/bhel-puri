@@ -11,6 +11,7 @@ import { updateAuction, cancelAuction, getAuctionImageUrl, addToWatchlist, remov
 import { joinAuction, leaveAuction, getUserParticipation } from '@/services/auctionParticipantService';
 import { placeBid } from '@/services/bidService';
 import { finalizeAuction } from '@/services/auctionFinalizationService';
+import { createAuctionConversation } from '@/services/chatService';
 import { useAuctionRealtime } from '@/hooks/useAuctionRealtime';
 import { useAuctionCountdown } from '@/hooks/useAuctionCountdown';
 import { Button } from '@/components/ui/Button';
@@ -42,6 +43,7 @@ export default function AuctionDetailsScreen() {
   // Local user's participation status
   const [participant, setParticipant] = useState<AuctionParticipant | null>(null);
   const [joining, setJoining] = useState(false);
+  const [initiatingChat, setInitiatingChat] = useState(false);
 
   // Watchlist check
   const [isWatched, setIsWatched] = useState(false);
@@ -191,6 +193,19 @@ export default function AuctionDetailsScreen() {
       Alert.alert('Failed to Join', err.message);
     } finally {
       setJoining(false);
+    }
+  };
+
+  const handleContactPress = async () => {
+    if (!id) return;
+    setInitiatingChat(true);
+    try {
+      const convId = await createAuctionConversation(id);
+      router.push(`/chat/${convId}`);
+    } catch (err: any) {
+      Alert.alert('Unable to Contact', err.message);
+    } finally {
+      setInitiatingChat(false);
     }
   };
 
@@ -655,7 +670,9 @@ export default function AuctionDetailsScreen() {
                     </Text>
                     <Button
                       label="Contact Winner"
-                      onPress={() => Alert.alert('Contact Winner', 'Private chat channel will open here in Phase 5!')}
+                      onPress={handleContactPress}
+                      loading={initiatingChat}
+                      disabled={initiatingChat}
                       icon={<MessageSquare size={18} color="#FFFFFF" />}
                       className="h-12 w-full"
                     />
@@ -680,7 +697,9 @@ export default function AuctionDetailsScreen() {
                   </Text>
                   <Button
                     label="Contact Seller"
-                    onPress={() => Alert.alert('Contact Seller', 'Private chat channel will open here in Phase 5!')}
+                    onPress={handleContactPress}
+                    loading={initiatingChat}
+                    disabled={initiatingChat}
                     icon={<MessageSquare size={18} color="#FFFFFF" />}
                     className="h-12 w-full"
                   />
