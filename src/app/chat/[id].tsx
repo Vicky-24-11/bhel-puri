@@ -61,7 +61,7 @@ export default function ChatScreen() {
     try {
       const { data, error } = await supabase
         .from('conversations')
-        .select('*, auction:auctions(*, images:auction_images(*)), seller:profiles(*), winner:profiles(*)')
+        .select('*, auction:auctions(*, images:auction_images(*)), seller:profiles!conversations_seller_id_fkey(*), winner:profiles!conversations_winner_id_fkey(*)')
         .eq('id', id)
         .single();
 

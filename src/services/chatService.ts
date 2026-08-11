@@ -26,7 +26,7 @@ export async function getConversations(currentUserId: string): Promise<Conversat
   // 1. Fetch conversations with details
   const { data: convs, error: convError } = await supabase
     .from('conversations')
-    .select('*, auction:auctions(*, images:auction_images(*)), seller:profiles(*), winner:profiles(*), messages(*)')
+    .select('*, auction:auctions(*, images:auction_images(*)), seller:profiles!conversations_seller_id_fkey(*), winner:profiles!conversations_winner_id_fkey(*), messages(*)')
     .or(`seller_id.eq.${currentUserId},winner_id.eq.${currentUserId}`)
     .order('updated_at', { ascending: false });
 
