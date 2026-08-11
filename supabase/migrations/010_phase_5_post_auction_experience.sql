@@ -1,6 +1,12 @@
 -- 010_PHASE_5_POST_AUCTION_EXPERIENCE.SQL
 -- Sets up conversations, messages, notifications, and trigger-driven automation for Phase 5.
 
+-- Drop legacy tables to avoid schema conflicts
+drop table if exists public.notifications cascade;
+drop table if exists public.messages cascade;
+drop table if exists public.conversation_participants cascade;
+drop table if exists public.conversations cascade;
+
 -- 1. Create conversations Table
 create table if not exists public.conversations (
   id uuid default gen_random_uuid() primary key,
