@@ -76,3 +76,44 @@ export interface Bid {
     full_name: string | null;
   } | null;
 }
+
+export interface Conversation {
+  id: string;
+  auction_id: string;
+  seller_id: string;
+  winner_id: string;
+  created_at: string;
+  updated_at: string;
+  auction?: Auction;
+  seller?: Profile;
+  winner?: Profile;
+  last_message?: Message | null;
+  unread_count?: number;
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+  read_at: string | null;
+  sender?: Profile;
+}
+
+export type NotificationType = 'auction_won' | 'auction_ended' | 'new_message' | 'auction_started' | 'outbid' | 'auction_cancelled';
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  auction_id: string | null;
+  conversation_id: string | null;
+  message_id: string | null;
+  is_read: boolean;
+  created_at: string;
+  auction?: Auction;
+  conversation?: Conversation;
+}
