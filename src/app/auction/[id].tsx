@@ -267,34 +267,74 @@ export default function AuctionDetailsScreen() {
 
   const handlePlaceBidAmount = async (amountVal?: number) => {
     if (!user || !auction) {
-      Alert.alert('Sign In Required', 'Please sign in to place bids.');
+      Alert.alert('Sign In Required', 'Please sign in to place bids/offers.');
       return;
     }
     if (isSeller) {
-      Alert.alert('Seller Blocked', 'You cannot place bids on your own auctions.');
+      Alert.alert(
+        auction.auction_type === 'reverse' ? 'Owner Blocked' : 'Seller Blocked',
+        auction.auction_type === 'reverse'
+          ? 'You cannot place offers on your own buy requests.'
+          : 'You cannot place bids on your own auctions.'
+      );
       return;
     }
     if (participant?.status !== 'active') {
-      Alert.alert('Join Required', 'You must join this auction before placing a bid.');
+      Alert.alert(
+        'Join Required',
+        auction.auction_type === 'reverse'
+          ? 'You must join this request before placing an offer.'
+          : 'You must join this auction before placing a bid.'
+      );
       return;
     }
 
+    const isReverse = auction.auction_type === 'reverse';
     const price = auction.current_price;
     const increment = auction.minimum_bid_increment;
     const startPrice = auction.starting_price;
-    const nextMinBid = price > 0 ? price + increment : startPrice;
+    
+    const hasBidsVal = bids && bids.length > 0;
+    const nextAllowedAmount = isReverse
+      ? (hasBidsVal ? price - increment : startPrice)
+      : (price > 0 ? price + increment : startPrice);
 
     const bidVal = amountVal ?? parseFloat(bidAmountStr);
     if (isNaN(bidVal) || bidVal <= 0) {
-      Alert.alert('Validation Error', 'Please enter a valid numeric bid amount.');
+      Alert.alert('Validation Error', 'Please enter a valid numeric amount.');
       return;
     }
-    if (bidVal < nextMinBid) {
-      Alert.alert(
-        'Bid Too Low',
-        `Your bid is too low. The minimum allowed next bid is ₹${nextMinBid.toLocaleString('en-IN')}.`
-      );
-      return;
+
+    if (isReverse) {
+      if (hasBidsVal && bidVal > nextAllowedAmount) {
+        Alert.alert(
+          'Offer Too High',
+          `Your offer is too high. The maximum allowed next offer is ₹${nextAllowedAmount.toLocaleString('en-IN')}.`
+        );
+        return;
+      }
+      if (!hasBidsVal && bidVal > startPrice) {
+        Alert.alert(
+          'Offer Exceeds Budget',
+          `Your offer exceeds the maximum budget of ₹${startPrice.toLocaleString('en-IN')}.`
+        );
+        return;
+      }
+      if (auction.minimum_price !== null && auction.minimum_price !== undefined && bidVal < auction.minimum_price) {
+        Alert.alert(
+          'Offer Below Minimum',
+          `Your offer is below the minimum acceptable price of ₹${auction.minimum_price.toLocaleString('en-IN')}.`
+        );
+        return;
+      }
+    } else {
+      if (bidVal < nextAllowedAmount) {
+        Alert.alert(
+          'Bid Too Low',
+          `Your bid is too low. The minimum allowed next bid is ₹${nextAllowedAmount.toLocaleString('en-IN')}.`
+        );
+        return;
+      }
     }
 
     setPlacingBid(true);
@@ -304,19 +344,32 @@ export default function AuctionDetailsScreen() {
         triggerHaptic('success');
         setBidAmountStr('');
         refresh();
-        Alert.alert('Bid Success', 'Your bid was accepted and recorded in the database.');
+        Alert.alert(
+          isReverse ? 'Offer Success' : 'Bid Success',
+          isReverse 
+            ? 'Your offer was accepted and recorded in the database.'
+            : 'Your bid was accepted and recorded in the database.'
+        );
       } else {
         triggerHaptic('error');
-        if (result.message.includes('at least')) {
-          Alert.alert('Outbid!', 'Someone else placed a higher bid during your submission. Please verify the new price and try again.');
+        if (result.message.includes('at least') || result.message.includes('at most')) {
+          Alert.alert(
+            isReverse ? 'Offer Superseded!' : 'Outbid!', 
+            isReverse 
+              ? 'Someone else placed a lower offer during your submission. Please verify the new price and try again.'
+              : 'Someone else placed a higher bid during your submission. Please verify the new price and try again.'
+          );
         } else {
-          Alert.alert('Bid Rejected', result.message);
+          Alert.alert(isReverse ? 'Offer Rejected' : 'Bid Rejected', result.message);
         }
         refresh();
       }
     } catch (err: any) {
       triggerHaptic('error');
-      Alert.alert('Error', err.message || 'Unable to submit bid. Please check your network and try again.');
+      Alert.alert(
+        'Error',
+        err.message || (isReverse ? 'Unable to submit offer. Please check your network and try again.' : 'Unable to submit bid. Please check your network and try again.')
+      );
       refresh();
     } finally {
       setPlacingBid(false);
@@ -447,12 +500,24 @@ export default function AuctionDetailsScreen() {
     badgeType = 'error';
   }
 
-  const nextMinBidAmount = auction.current_price > 0 
-    ? auction.current_price + auction.minimum_bid_increment 
-    : auction.starting_price;
+  const isReverse = auction.auction_type === 'reverse';
+  const hasBids = bids && bids.length > 0;
+  
+  const nextMinBidAmount = isReverse
+    ? (hasBids ? auction.current_price - auction.minimum_bid_increment : auction.starting_price)
+    : (auction.current_price > 0 ? auction.current_price + auction.minimum_bid_increment : auction.starting_price);
 
-  // Convenient bid chips suggestions
-  const bidSuggestions = [nextMinBidAmount, nextMinBidAmount + 500, nextMinBidAmount + 1000, nextMinBidAmount + 2000];
+  let bidSuggestions = isReverse
+    ? [nextMinBidAmount, nextMinBidAmount - 500, nextMinBidAmount - 1000, nextMinBidAmount - 2000]
+    : [nextMinBidAmount, nextMinBidAmount + 500, nextMinBidAmount + 1000, nextMinBidAmount + 2000];
+
+  // Clamp and filter suggestions for reverse auctions
+  if (isReverse) {
+    if (auction.minimum_price !== null && auction.minimum_price !== undefined) {
+      bidSuggestions = bidSuggestions.filter(val => val >= auction.minimum_price!);
+    }
+    bidSuggestions = bidSuggestions.filter(val => val >= 0);
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-brand-background">
@@ -575,7 +640,7 @@ export default function AuctionDetailsScreen() {
             <View className="flex-row items-center gap-1.5 mb-4">
               <Users size={12} color="#7F8C8D" />
               <Text className="text-xs font-display text-brand-muted font-medium">
-                {participantCount} participating in this war
+                {participantCount} participating in this {isReverse ? 'buy request' : 'war'}
               </Text>
             </View>
           )}
@@ -584,11 +649,11 @@ export default function AuctionDetailsScreen() {
           <View className="w-full flex-row border border-stone-200 bg-white rounded-3xl p-5 mb-6 shadow-sm">
             <View className="flex-1">
               <Text className="text-[10px] font-display text-brand-muted uppercase font-semibold tracking-wider mb-1">
-                {currentStatus === 'scheduled' ? 'Starting Price' : 'Current Bid'}
+                {currentStatus === 'scheduled' ? (isReverse ? 'Max Budget' : 'Starting Price') : (isReverse ? 'Best Offer' : 'Current Bid')}
               </Text>
               <PriceDisplay amount={auction.current_price} size="xl" className="text-brand-text" />
               <Text className="text-[10px] font-display text-brand-muted mt-1">
-                Increment: ₹{(auction.minimum_bid_increment || 0).toLocaleString('en-IN')}
+                {isReverse ? 'Decrement' : 'Increment'}: ₹{(auction.minimum_bid_increment || 0).toLocaleString('en-IN')}
               </Text>
             </View>
 
@@ -688,7 +753,13 @@ export default function AuctionDetailsScreen() {
                         className="flex-1 items-center justify-center py-2.5 bg-stone-50 border border-stone-200 rounded-xl active:bg-brand-primary/10 active:border-brand-primary"
                       >
                         <Text className="text-[10px] font-display text-brand-muted font-semibold mb-0.5">
-                          {idx === 0 ? 'Min Bid' : `+₹${((val - nextMinBidAmount)).toLocaleString('en-IN')}`}
+                          {idx === 0 
+                            ? (isReverse ? 'Max Offer' : 'Min Bid') 
+                            : (isReverse 
+                                ? `-₹${(Math.abs(nextMinBidAmount - val)).toLocaleString('en-IN')}` 
+                                : `+₹${(val - nextMinBidAmount).toLocaleString('en-IN')}`
+                              )
+                          }
                         </Text>
                         <Text className="text-xs font-display font-bold text-brand-text">
                           ₹{val.toLocaleString('en-IN')}
@@ -702,7 +773,7 @@ export default function AuctionDetailsScreen() {
                     <View className="flex-1 flex-row items-center bg-stone-50 border border-stone-200 rounded-2xl px-4 h-12">
                       <Text className="text-base font-display font-bold text-brand-muted mr-1.5">₹</Text>
                       <Input
-                        placeholder={`Min ${nextMinBidAmount.toLocaleString('en-IN')}`}
+                        placeholder={isReverse ? `Max ${nextMinBidAmount.toLocaleString('en-IN')}` : `Min ${nextMinBidAmount.toLocaleString('en-IN')}`}
                         value={bidAmountStr}
                         onChangeText={setBidAmountStr}
                         keyboardType="numeric"
@@ -711,7 +782,7 @@ export default function AuctionDetailsScreen() {
                       />
                     </View>
                     <Button
-                      label="Bid"
+                      label={isReverse ? 'Offer' : 'Bid'}
                       onPress={() => handlePlaceBidAmount()}
                       loading={placingBid}
                       disabled={placingBid || !isOnline || !isConnected}
@@ -730,14 +801,14 @@ export default function AuctionDetailsScreen() {
                 auction.winner ? (
                   <View className="items-center py-1">
                     <Text className="text-base font-display font-bold text-brand-text mb-1">
-                      🎉 Your Listing Sold!
+                      {isReverse ? '🎉 Buy Request Fulfilled!' : '🎉 Your Listing Sold!'}
                     </Text>
                     <Text className="text-xs font-display text-brand-muted text-center max-w-sm leading-relaxed mb-4">
-                      Winning Bid: <Text className="font-bold text-brand-text">₹{auction.current_price.toLocaleString('en-IN')}</Text> by <Text className="font-bold text-brand-text">@{auction.winner.username}</Text>.
+                      {isReverse ? 'Winning Offer' : 'Winning Bid'}: <Text className="font-bold text-brand-text">₹{auction.current_price.toLocaleString('en-IN')}</Text> by <Text className="font-bold text-brand-text">@{auction.winner.username}</Text>.
                     </Text>
                     <View className="w-full gap-2">
                       <Button
-                        label="Contact Winner"
+                        label={isReverse ? 'Contact Seller' : 'Contact Winner'}
                         onPress={handleContactPress}
                         loading={initiatingChat}
                         disabled={initiatingChat}
@@ -756,24 +827,28 @@ export default function AuctionDetailsScreen() {
                 ) : (
                   <View className="items-center py-2">
                     <Text className="text-sm font-display font-bold text-brand-text mb-1">
-                      Auction Finished
+                      {isReverse ? 'Request Finished' : 'Auction Finished'}
                     </Text>
                     <Text className="text-xs font-display text-brand-muted text-center max-w-sm leading-relaxed">
-                      No bids were placed on this listing. You can clone or republish it.
+                      {isReverse ? 'No offers were placed on this request.' : 'No bids were placed on this listing. You can clone or republish it.'}
                     </Text>
                   </View>
                 )
               ) : auction.winner_id === user?.id ? (
                 <View className="items-center py-1">
                   <Text className="text-base font-display font-bold text-emerald-600 mb-1">
-                    🎉 You Won This Auction!
+                    {isReverse ? '🎉 Your Offer Won!' : '🎉 You Won This Auction!'}
                   </Text>
                   <Text className="text-xs font-display text-brand-muted text-center max-w-sm leading-relaxed mb-4">
-                    Your winning bid was <Text className="font-bold text-brand-text">₹{auction.current_price.toLocaleString('en-IN')}</Text>. Connect with the seller <Text className="font-bold text-brand-text">@{auction.seller?.username}</Text> to complete transaction terms.
+                    {isReverse 
+                      ? 'Your winning offer was '
+                      : 'Your winning bid was '
+                    }
+                    <Text className="font-bold text-brand-text">₹{auction.current_price.toLocaleString('en-IN')}</Text>. Connect with the buyer <Text className="font-bold text-brand-text">@{auction.seller?.username}</Text> to complete transaction terms.
                   </Text>
                   <View className="w-full gap-2">
                     <Button
-                      label="Contact Seller"
+                      label={isReverse ? 'Contact Buyer' : 'Contact Seller'}
                       onPress={handleContactPress}
                       loading={initiatingChat}
                       disabled={initiatingChat}
@@ -792,10 +867,10 @@ export default function AuctionDetailsScreen() {
               ) : (
                 <View className="items-center py-2">
                   <Text className="text-sm font-display font-bold text-brand-text mb-1">
-                    Auction Ended
+                    {isReverse ? 'Request Ended' : 'Auction Ended'}
                   </Text>
                   <Text className="text-xs font-display text-brand-muted text-center max-w-sm leading-relaxed">
-                    This auction has ended. The winning bid was <Text className="font-bold text-brand-text">₹{auction.current_price.toLocaleString('en-IN')}</Text>.
+                    This request has ended. The winning offer was <Text className="font-bold text-brand-text">₹{auction.current_price.toLocaleString('en-IN')}</Text>.
                   </Text>
                 </View>
               )}
@@ -806,12 +881,12 @@ export default function AuctionDetailsScreen() {
           {currentStatus === 'live' && (
             <View className="mb-6 bg-white border border-stone-200 p-5 rounded-3xl shadow-sm">
               <Text className="text-sm font-display font-bold text-brand-text mb-3">
-                Live Bid History
+                {isReverse ? 'Live Offer History' : 'Live Bid History'}
               </Text>
               
               {bids.length === 0 ? (
                 <View className="py-4 items-center justify-center">
-                  <Text className="text-xs font-display text-brand-muted">No bids placed yet. Be the first!</Text>
+                  <Text className="text-xs font-display text-brand-muted">{isReverse ? 'No offers placed yet. Be the first!' : 'No bids placed yet. Be the first!'}</Text>
                 </View>
               ) : (
                 <View className="gap-2.5">

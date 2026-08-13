@@ -28,6 +28,7 @@ export interface AuctionCardProps {
   category_name?: string;
   status?: string;
   starts_at?: string;
+  auction_type?: 'forward' | 'reverse';
 }
 
 export const AuctionCard: React.FC<AuctionCardProps> = ({
@@ -47,6 +48,7 @@ export const AuctionCard: React.FC<AuctionCardProps> = ({
   category_name,
   status = 'live',
   starts_at,
+  auction_type = 'forward',
 }) => {
   const { user } = useAuth();
   const [isWatched, setIsWatched] = useState(false);
@@ -172,6 +174,11 @@ export const AuctionCard: React.FC<AuctionCardProps> = ({
         {/* Floating Badges */}
         <View className="absolute bottom-3 left-3 flex-row gap-1.5">
           <Badge
+            label={auction_type === 'reverse' ? '🔄 Buy Request' : '🔨 Auction'}
+            type={auction_type === 'reverse' ? 'warning' : 'success'}
+            size="sm"
+          />
+          <Badge
             label={badgeLabel}
             type={badgeType}
             size="sm"
@@ -197,7 +204,7 @@ export const AuctionCard: React.FC<AuctionCardProps> = ({
         <View className="flex-row items-center justify-between mb-2">
           <View>
             <Text className="text-[11px] font-display text-brand-muted uppercase tracking-wider mb-0.5">
-              {currentStatus === 'scheduled' ? 'Starting Price' : 'Current Price'}
+              {currentStatus === 'scheduled' ? (auction_type === 'reverse' ? 'Max Budget' : 'Starting Price') : (auction_type === 'reverse' ? 'Best Offer' : 'Current Price')}
             </Text>
             <PriceDisplay amount={price} size="md" className="text-brand-text" />
           </View>
@@ -219,7 +226,7 @@ export const AuctionCard: React.FC<AuctionCardProps> = ({
         {/* Footer info: Bids Count & Location */}
         <View className="flex-row items-center justify-between pt-2.5 border-t border-stone-100">
           <Text className="text-xs font-display font-semibold text-brand-primary">
-            ⚡ {activeBids} {activeBids === 1 ? 'bid' : 'bids'}
+            ⚡ {activeBids} {activeBids === 1 ? (auction_type === 'reverse' ? 'offer' : 'bid') : (auction_type === 'reverse' ? 'offers' : 'bids')}
           </Text>
 
           <View className="flex-row items-center">

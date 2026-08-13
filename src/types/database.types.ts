@@ -52,6 +52,9 @@ export interface Auction {
   status: AuctionStatus;
   highest_bidder_id?: string | null;
   winner_id: string | null;
+  auction_type: 'forward' | 'reverse';
+  minimum_price?: number | null;
+  bid_count?: number;
   created_at: string;
   updated_at: string;
   primary_image_url?: string;
