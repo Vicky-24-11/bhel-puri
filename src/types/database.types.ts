@@ -22,7 +22,21 @@ export interface Category {
   created_at: string;
 }
 
-export type AuctionStatus = 'draft' | 'scheduled' | 'live' | 'ended' | 'cancelled';
+export type AuctionStatus = 'draft' | 'scheduled' | 'live' | 'ended' | 'cancelled' | 'completed';
+
+export type TransactionStatus = 'pending' | 'contacted' | 'completed' | 'cancelled';
+
+export interface Transaction {
+  id: string;
+  auction_id: string;
+  seller_id: string;
+  buyer_id: string;
+  winning_bid_id: string | null;
+  amount: number;
+  status: TransactionStatus;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface Auction {
   id: string;
