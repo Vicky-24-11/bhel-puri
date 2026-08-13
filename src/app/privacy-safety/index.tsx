@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, Alert, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Users, FileText, ShieldAlert, Trash2, ChevronRight, Lock, Eye } from 'lucide-react-native';
+import { ArrowLeft, Users, FileText, ShieldAlert, Trash2, ChevronRight, Lock, Eye, Bell } from 'lucide-react-native';
 import { router } from 'expo-router';
 
 import { deleteAccount } from '@/services/moderationService';
@@ -52,7 +52,8 @@ export default function PrivacySafetyDashboard() {
       title: 'Safety & Moderation',
       items: [
         { label: 'Blocked Users', icon: Users, description: 'Manage profiles you have blocked', route: '/privacy-safety/blocked' },
-        { label: 'Report History', icon: ShieldAlert, description: 'View safety report logs submitted by you', route: '/privacy-safety/reports' }
+        { label: 'Report History', icon: ShieldAlert, description: 'View safety report logs submitted by you', route: '/privacy-safety/reports' },
+        { label: 'Notification Settings', icon: Bell, description: 'Manage push and transactional alerts', route: '/privacy-safety/notifications-settings' }
       ]
     },
     {

@@ -1,12 +1,21 @@
 import { useEffect, useState } from 'react';
-import { useColorScheme, View, Text } from 'react-native';
+import { useColorScheme, View, Text, Platform } from 'react-native';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useSegments, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Notifications from 'expo-notifications';
+
 import { AuthProvider, useAuth } from '../lib/AuthContext';
 import { LoadingState } from '../components/ui/LoadingState';
+import { initErrorMonitoring } from '../services/errorMonitoringService';
+import { ErrorBoundary } from '../components/ErrorBoundary';
+import { registerForPushNotificationsAsync, handleNotificationTap } from '../services/pushNotificationService';
+import { trackEvent } from '../services/analyticsService';
 
 import '../global.css';
+
+// Initialize global error monitoring
+initErrorMonitoring();
 
 // Prevent the splash screen from auto-hiding before assets load.
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -15,9 +24,11 @@ let isSplashHidden = false;
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <InnerLayout />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <InnerLayout />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -69,6 +80,27 @@ function InnerLayout() {
       router.replace('/(tabs)');
     }
   }, [authState, segments, router]);
+
+  // Register push tokens when user is authenticated, and track app opens
+  useEffect(() => {
+    if (authState === 'PROFILE_COMPLETE' || authState === 'SIGNED_IN') {
+      registerForPushNotificationsAsync();
+      trackEvent('app_opened');
+    }
+  }, [authState]);
+
+  // Listen to push notification clicks
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      handleNotificationTap
+    );
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   if (authState === 'INITIALIZING' || !mounted) {
     return (

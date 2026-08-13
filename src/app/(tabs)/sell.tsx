@@ -3,6 +3,7 @@ import { View, Text, ScrollView, Pressable, Alert, Platform, ActivityIndicator }
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlusCircle, ChevronRight, Check, X, Camera, Info } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
 
@@ -134,6 +135,26 @@ export default function SellScreen() {
       // Determine initial status based on times
       const status = 'live';
 
+      // Perform client-side image compression on native devices
+      const processedUris: string[] = [];
+      for (const uri of imageUris) {
+        if (Platform.OS === 'web') {
+          processedUris.push(uri);
+        } else {
+          try {
+            const compressed = await ImageManipulator.manipulateAsync(
+              uri,
+              [{ resize: { width: 1200 } }], // Resize large edge to 1200px max (retains aspect ratio)
+              { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+            );
+            processedUris.push(compressed.uri);
+          } catch (compressErr) {
+            console.warn('Compression failed for image, fallback to original:', compressErr);
+            processedUris.push(uri);
+          }
+        }
+      }
+
       await createAuction({
         seller_id: user.id,
         category_id: selectedCategory!.id,
@@ -146,7 +167,7 @@ export default function SellScreen() {
         ends_at: endsAt.toISOString(),
         status: status,
         winner_id: null
-      }, imageUris);
+      }, processedUris);
 
       Alert.alert('Listing Active', 'Your auction listing has been published and is now live!');
       

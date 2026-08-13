@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, Alert, Platform, Modal, TextInput } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
+import Head from 'expo-router/head';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, MapPin, ShieldCheck, Heart, Gavel, Settings, X, Users, MessageSquare, AlertCircle, MoreVertical, ShieldAlert, UserX } from 'lucide-react-native';
 import { Image } from 'expo-image';
@@ -442,6 +443,17 @@ export default function AuctionDetailsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-brand-background">
+      {Platform.OS === 'web' && auction && (
+        <Head>
+          <title>{`${auction.title} | Bhel Puri`}</title>
+          <meta name="description" content={auction.description || "Bid on live auctions!"} />
+          <meta property="og:title" content={auction.title} />
+          <meta property="og:description" content={auction.description || "Bid on live auctions!"} />
+          {auction.images && auction.images.length > 0 && (
+            <meta property="og:image" content={getAuctionImageUrl(auction.images[0].storage_path)} />
+          )}
+        </Head>
+      )}
       {/* Navigation Header */}
       <View className="px-5 py-3 flex-row items-center justify-between border-b border-stone-200 bg-white">
         <Pressable onPress={() => router.back()} className="p-2 -ml-2">
