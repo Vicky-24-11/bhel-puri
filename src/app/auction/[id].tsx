@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, Alert, Platform, Modal, TextInput } from 'react-native';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, Alert, Platform, Modal, TextInput, useWindowDimensions } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import Head from 'expo-router/head';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -28,6 +28,7 @@ import * as Haptics from 'expo-haptics';
 export default function AuctionDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
+  const { width: screenWidth } = useWindowDimensions();
 
   // Network offline state monitoring
   const [isOnline, setIsOnline] = useState(true);
@@ -299,7 +300,8 @@ export default function AuctionDetailsScreen() {
       ? (hasBidsVal ? price - increment : startPrice)
       : (price > 0 ? price + increment : startPrice);
 
-    const bidVal = amountVal ?? parseFloat(bidAmountStr);
+    const cleanedStr = bidAmountStr.replace(/[₹\s,]/g, '');
+    const bidVal = amountVal ?? parseFloat(cleanedStr);
     if (isNaN(bidVal) || bidVal <= 0) {
       Alert.alert('Validation Error', 'Please enter a valid numeric amount.');
       return;
@@ -571,7 +573,7 @@ export default function AuctionDetailsScreen() {
                 className="w-full h-full"
               >
                 {auction.images.map((img: any) => (
-                  <View key={img.id} style={{ width: Platform.OS === 'web' ? '100%' : 400 }} className="aspect-[4/3]">
+                  <View key={img.id} style={{ width: Platform.OS === 'web' ? '100%' : screenWidth }} className="aspect-[4/3]">
                     <Image
                       source={{ uri: getAuctionImageUrl(img.storage_path) }}
                       contentFit="cover"

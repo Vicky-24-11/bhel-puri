@@ -1,17 +1,33 @@
 import { supabase } from '../lib/supabase';
 import { Auction, AuctionImage } from '../types/database.types';
+import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
+
+// Helper to convert URIs to Blobs/ArrayBuffers cross-platform (handles fetch for web and expo-file-system base64 arraybuffer for native)
+async function readImageData(uri: string): Promise<Blob | ArrayBuffer> {
+  if (Platform.OS === 'web') {
+    const response = await fetch(uri);
+    return await response.blob();
+  } else {
+    // Native platforms: read as base64 and decode to ArrayBuffer for Supabase Storage
+    const base64 = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return decode(base64);
+  }
+}
 
 // Storage Upload Helper (converts file URI to blob for native/web cross-platform uploads)
 export async function uploadAuctionImage(uri: string, sellerId: string, auctionId: string): Promise<string> {
-  const response = await fetch(uri);
-  const blob = await response.blob();
+  const fileData = await readImageData(uri);
   
   const extension = uri.split('.').pop() || 'jpg';
   const fileName = `${sellerId}/${auctionId}/${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${extension}`;
   
   const { data, error } = await supabase.storage
     .from('product-images')
-    .upload(fileName, blob, {
+    .upload(fileName, fileData, {
       contentType: `image/${extension === 'png' ? 'png' : 'jpeg'}`,
     });
 

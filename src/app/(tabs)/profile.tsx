@@ -1,22 +1,39 @@
-import React from 'react';
-import { View, Text, ScrollView, Pressable, Alert, Platform, Image } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { User, ShieldCheck, Star, Gavel, LogOut, ChevronRight, MapPin, ShieldAlert } from 'lucide-react-native';
-import { router } from 'expo-router';
+import { router } from "expo-router";
+import {
+  ChevronRight,
+  Gavel,
+  LogOut,
+  MapPin,
+  ShieldAlert,
+  ShieldCheck,
+  Star,
+  User,
+} from "lucide-react-native";
+import React from "react";
+import {
+  Alert,
+  Image,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { Button } from '@/components/ui/Button';
-import { useAuth } from '@/lib/AuthContext';
-import { signOut } from '@/services/authService';
+import { Button } from "@/components/ui/Button";
+import { useAuth } from "@/lib/AuthContext";
+import { signOut } from "@/services/authService";
 
 export default function ProfileScreen() {
   const { user, profile } = useAuth();
 
   const handleMenuPress = (label: string) => {
     const msg = `This launches the "${label}" interface, synchronized via Supabase in production.`;
-    if (Platform.OS === 'web') {
+    if (Platform.OS === "web") {
       window.alert(`Bhel Puri: ${msg}`);
     } else {
-      Alert.alert('Bhel Puri', msg);
+      Alert.alert("Bhel Puri", msg);
     }
   };
 
@@ -25,37 +42,54 @@ export default function ProfileScreen() {
       try {
         await signOut();
       } catch (err: any) {
-        console.error('Logout error:', err);
-        const errMsg = err.message || 'Failed to sign out. Please try again.';
-        if (Platform.OS === 'web') {
+        console.error("Logout error:", err);
+        const errMsg = err.message || "Failed to sign out. Please try again.";
+        if (Platform.OS === "web") {
           window.alert(errMsg);
         } else {
-          Alert.alert('Error', errMsg);
+          Alert.alert("Error", errMsg);
         }
       }
     };
 
-    if (Platform.OS === 'web') {
-      if (window.confirm('Are you sure you want to log out of Bhel Puri?')) {
+    if (Platform.OS === "web") {
+      if (window.confirm("Are you sure you want to log out of Bhel Puri?")) {
         action();
       }
     } else {
       Alert.alert(
-        'Confirm Log Out',
-        'Are you sure you want to log out of Bhel Puri?',
+        "Confirm Log Out",
+        "Are you sure you want to log out of Bhel Puri?",
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Log Out', style: 'destructive', onPress: action }
-        ]
+          { text: "Cancel", style: "cancel" },
+          { text: "Log Out", style: "destructive", onPress: action },
+        ],
       );
     }
   };
 
   const menuItems = [
-    { label: 'Edit Profile', icon: User, action: () => router.push('/edit-profile' as any) },
-    { label: 'My Active Listings', icon: Gavel, action: () => router.push('/my-auctions' as any) },
-    { label: 'Won Handover Coordinates', count: 0, icon: ShieldCheck, action: () => handleMenuPress('Won Handover Coordinates') },
-    { label: 'Privacy & Safety', icon: ShieldAlert, action: () => router.push('/privacy-safety' as any) },
+    {
+      label: "Edit Profile",
+      icon: User,
+      action: () => router.push("/edit-profile" as any),
+    },
+    {
+      label: "My Active Listings",
+      icon: Gavel,
+      action: () => router.push("/my-auctions" as any),
+    },
+    {
+      label: "Won Handover Coordinates",
+      count: 0,
+      icon: ShieldCheck,
+      action: () => handleMenuPress("Won Handover Coordinates"),
+    },
+    {
+      label: "Privacy & Safety",
+      icon: ShieldAlert,
+      action: () => router.push("/privacy-safety" as any),
+    },
   ];
 
   return (
@@ -75,18 +109,22 @@ export default function ProfileScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
         <View className="w-full max-w-2xl mx-auto px-5 pt-6 pb-12">
-          
           {/* User Hero Section Card */}
           <View className="w-full bg-white border border-stone-200 rounded-3xl p-5 mb-6 shadow-sm items-center">
             {/* Large Avatar */}
             {profile?.avatar_url || user?.user_metadata?.avatar_url ? (
               <Image
-                source={{ uri: profile?.avatar_url || user?.user_metadata?.avatar_url }}
+                source={{
+                  uri: profile?.avatar_url || user?.user_metadata?.avatar_url,
+                }}
                 className="w-20 h-20 rounded-full mb-3 border border-stone-200"
               />
             ) : (
-              <View 
-                style={{ backgroundColor: 'rgba(255, 107, 53, 0.1)', borderColor: 'rgba(255, 107, 53, 0.25)' }}
+              <View
+                style={{
+                  backgroundColor: "rgba(255, 107, 53, 0.1)",
+                  borderColor: "rgba(255, 107, 53, 0.25)",
+                }}
                 className="w-20 h-20 border rounded-full items-center justify-center mb-3"
               >
                 <User size={40} color="#FF6B35" />
@@ -96,22 +134,29 @@ export default function ProfileScreen() {
             {/* Name and Verification Badge */}
             <View className="flex-row items-center justify-center gap-1.5 mb-1">
               <Text className="text-xl font-display font-extrabold text-brand-text">
-                {profile?.full_name || 'Bhel Puri Bidder'}
+                {profile?.full_name || "Bhel Puri Bidder"}
               </Text>
-              {profile?.is_verified && <ShieldCheck size={18} color="#2EC4B6" fill="#2EC4B6" fillOpacity={0.2} />}
+              {profile?.is_verified && (
+                <ShieldCheck
+                  size={18}
+                  color="#2EC4B6"
+                  fill="#2EC4B6"
+                  fillOpacity={0.2}
+                />
+              )}
             </View>
 
             <Text className="text-sm font-display text-brand-muted mb-1">
-              @{profile?.username || 'bidder'}
+              @{profile?.username || "bidder"}
             </Text>
             {user?.email ? (
               <Text className="text-xs font-display text-brand-muted mb-3">
                 {user.email}
               </Text>
             ) : null}
-            
+
             <Text className="text-xs font-display text-brand-muted mb-4 text-center px-4 leading-relaxed">
-              {profile?.bio || 'No bio provided yet.'}
+              {profile?.bio || "No bio provided yet."}
             </Text>
 
             {profile?.city ? (
@@ -125,18 +170,24 @@ export default function ProfileScreen() {
 
             {/* Star Ratings Empty State Check */}
             {profile?.total_ratings && profile.total_ratings > 0 ? (
-              <View 
-                style={{ backgroundColor: 'rgba(255, 182, 39, 0.15)' }}
+              <View
+                style={{ backgroundColor: "rgba(255, 182, 39, 0.15)" }}
                 className="flex-row items-center px-3 py-1.5 rounded-full mb-5"
               >
-                <Star size={14} color="#FFB627" fill="#FFB627" className="mr-1" />
+                <Star
+                  size={14}
+                  color="#FFB627"
+                  fill="#FFB627"
+                  className="mr-1"
+                />
                 <Text className="text-xs font-display font-bold text-brand-text">
-                  {profile?.rating || '0.00'} Seller Rating ({profile?.total_ratings} deals)
+                  {profile?.rating || "0.00"} Seller Rating (
+                  {profile?.total_ratings} deals)
                 </Text>
               </View>
             ) : (
-              <View 
-                style={{ backgroundColor: 'rgba(127, 140, 141, 0.08)' }}
+              <View
+                style={{ backgroundColor: "rgba(127, 140, 141, 0.08)" }}
                 className="flex-row items-center px-3 py-1.5 rounded-full mb-5"
               >
                 <Star size={14} color="#7F8C8D" className="mr-1" />
@@ -156,7 +207,7 @@ export default function ProfileScreen() {
                   Created
                 </Text>
               </View>
-              
+
               <View className="h-8 w-[1px] bg-stone-200 self-center" />
 
               <View className="items-center">
@@ -178,13 +229,15 @@ export default function ProfileScreen() {
                 <Pressable
                   key={idx}
                   onPress={item.action}
-                  className={`flex-row items-center justify-between p-4.5 ${
-                    idx < menuItems.length - 1 ? 'border-b border-stone-100' : ''
+                  className={`flex-row items-center justify-between p-4 ${
+                    idx < menuItems.length - 1
+                      ? "border-b border-stone-100"
+                      : ""
                   } active:bg-stone-50`}
                 >
                   <View className="flex-row items-center">
-                    <View 
-                      style={{ backgroundColor: 'rgba(255, 107, 53, 0.1)' }}
+                    <View
+                      style={{ backgroundColor: "rgba(255, 107, 53, 0.1)" }}
                       className="w-8 h-8 rounded-lg items-center justify-center mr-3"
                     >
                       <IconComp size={16} color="#FF6B35" />
@@ -217,7 +270,6 @@ export default function ProfileScreen() {
             onPress={handleLogout}
             className="border-brand-error/20 active:bg-red-50"
           />
-
         </View>
       </ScrollView>
     </SafeAreaView>
