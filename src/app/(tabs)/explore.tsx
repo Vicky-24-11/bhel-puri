@@ -9,6 +9,7 @@ import { getCategories } from '@/services/categoryService';
 import { getAuctions, FetchAuctionsParams } from '@/services/auctionService';
 import { Category, Auction } from '@/types/database.types';
 import { AuctionCard } from '@/components/ui/AuctionCard';
+import { finalizeExpiredAuctions } from '@/services/auctionFinalizationService';
 
 export default function ExploreScreen() {
   const params = useLocalSearchParams<{ category?: string; query?: string }>();
@@ -54,8 +55,12 @@ export default function ExploreScreen() {
     };
   }, [searchQuery]);
 
-  // Load Categories on mount
+  // Load Categories on mount & sweep expired auctions
   useEffect(() => {
+    finalizeExpiredAuctions().catch((err) => {
+      console.warn('Lazy sweep of expired auctions failed:', err);
+    });
+
     getCategories()
       .then((data) => {
         setCategories(data);

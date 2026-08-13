@@ -13,6 +13,7 @@ import { joinAuction, leaveAuction, getUserParticipation } from '@/services/auct
 import { placeBid } from '@/services/bidService';
 import { finalizeAuction } from '@/services/auctionFinalizationService';
 import { createAuctionConversation } from '@/services/chatService';
+import { getTransactionByAuctionId } from '@/services/transactionService';
 import { submitReport, blockUser } from '@/services/moderationService';
 import { useAuctionRealtime } from '@/hooks/useAuctionRealtime';
 import { useAuctionCountdown } from '@/hooks/useAuctionCountdown';
@@ -63,6 +64,7 @@ export default function AuctionDetailsScreen() {
   // Manual bid input value
   const [bidAmountStr, setBidAmountStr] = useState('');
   const [placingBid, setPlacingBid] = useState(false);
+  const [transactionId, setTransactionId] = useState<string | null>(null);
 
   // Seller management modal states
   const [showManageModal, setShowManageModal] = useState(false);
@@ -149,6 +151,17 @@ export default function AuctionDetailsScreen() {
   const currentStatus = auction?.status?.toLowerCase();
   const timerEnd = currentStatus === 'scheduled' ? auction?.starts_at : auction?.ends_at;
   const { timeLeft, isExpired } = useAuctionCountdown(timerEnd || new Date().toISOString(), handleExpiration);
+
+  // Load associated transaction details if auction is completed
+  useEffect(() => {
+    if ((currentStatus === 'completed' || auction?.winner_id) && id) {
+      getTransactionByAuctionId(id)
+        .then((tx) => {
+          if (tx) setTransactionId(tx.id);
+        })
+        .catch((err) => console.log('Error fetching transaction ID:', err));
+    }
+  }, [currentStatus, auction?.winner_id, id]);
 
   const triggerHaptic = (type: 'success' | 'error') => {
     if (Haptics && Haptics.notificationAsync) {
@@ -426,8 +439,8 @@ export default function AuctionDetailsScreen() {
   if (currentStatus === 'scheduled') {
     statusText = 'Upcoming';
     badgeType = 'warning';
-  } else if (currentStatus === 'ended') {
-    statusText = 'Ended';
+  } else if (currentStatus === 'ended' || currentStatus === 'completed') {
+    statusText = currentStatus === 'completed' ? 'Completed' : 'Ended';
     badgeType = 'neutral';
   } else if (currentStatus === 'cancelled') {
     statusText = 'Cancelled';
@@ -583,9 +596,9 @@ export default function AuctionDetailsScreen() {
 
             <View className="flex-1 items-end justify-center">
               <Text className="text-[10px] font-display text-brand-muted uppercase font-semibold tracking-wider mb-1">
-                {currentStatus === 'scheduled' ? 'Starts In' : currentStatus === 'ended' ? 'Finished' : 'Time Left'}
+                {currentStatus === 'scheduled' ? 'Starts In' : (currentStatus === 'ended' || currentStatus === 'completed') ? 'Finished' : 'Time Left'}
               </Text>
-              {currentStatus === 'ended' || isExpired ? (
+              {currentStatus === 'ended' || currentStatus === 'completed' || isExpired ? (
                 <Text className="text-lg font-display font-bold text-brand-muted">Ended</Text>
               ) : currentStatus === 'cancelled' ? (
                 <Text className="text-lg font-display font-bold text-brand-error">Cancelled</Text>
@@ -711,7 +724,7 @@ export default function AuctionDetailsScreen() {
           )}
 
           {/* Post-Auction Coordination Panel */}
-          {currentStatus === 'ended' && (
+          {(currentStatus === 'ended' || currentStatus === 'completed') && (
             <View className="mb-6 bg-white border border-stone-200 p-5 rounded-3xl shadow-sm gap-3">
               {isSeller ? (
                 auction.winner ? (
@@ -722,14 +735,23 @@ export default function AuctionDetailsScreen() {
                     <Text className="text-xs font-display text-brand-muted text-center max-w-sm leading-relaxed mb-4">
                       Winning Bid: <Text className="font-bold text-brand-text">₹{auction.current_price.toLocaleString('en-IN')}</Text> by <Text className="font-bold text-brand-text">@{auction.winner.username}</Text>.
                     </Text>
-                    <Button
-                      label="Contact Winner"
-                      onPress={handleContactPress}
-                      loading={initiatingChat}
-                      disabled={initiatingChat}
-                      icon={<MessageSquare size={18} color="#FFFFFF" />}
-                      className="h-12 w-full"
-                    />
+                    <View className="w-full gap-2">
+                      <Button
+                        label="Contact Winner"
+                        onPress={handleContactPress}
+                        loading={initiatingChat}
+                        disabled={initiatingChat}
+                        icon={<MessageSquare size={18} color="#FFFFFF" />}
+                        className="h-12 w-full"
+                      />
+                      {transactionId && (
+                        <Button
+                          label="View Transaction Details"
+                          onPress={() => router.push(`/transaction/${transactionId}`)}
+                          className="h-12 w-full bg-brand-text"
+                        />
+                      )}
+                    </View>
                   </View>
                 ) : (
                   <View className="items-center py-2">
@@ -749,14 +771,23 @@ export default function AuctionDetailsScreen() {
                   <Text className="text-xs font-display text-brand-muted text-center max-w-sm leading-relaxed mb-4">
                     Your winning bid was <Text className="font-bold text-brand-text">₹{auction.current_price.toLocaleString('en-IN')}</Text>. Connect with the seller <Text className="font-bold text-brand-text">@{auction.seller?.username}</Text> to complete transaction terms.
                   </Text>
-                  <Button
-                    label="Contact Seller"
-                    onPress={handleContactPress}
-                    loading={initiatingChat}
-                    disabled={initiatingChat}
-                    icon={<MessageSquare size={18} color="#FFFFFF" />}
-                    className="h-12 w-full"
-                  />
+                  <View className="w-full gap-2">
+                    <Button
+                      label="Contact Seller"
+                      onPress={handleContactPress}
+                      loading={initiatingChat}
+                      disabled={initiatingChat}
+                      icon={<MessageSquare size={18} color="#FFFFFF" />}
+                      className="h-12 w-full"
+                    />
+                    {transactionId && (
+                      <Button
+                        label="View Transaction Details"
+                        onPress={() => router.push(`/transaction/${transactionId}`)}
+                        className="h-12 w-full bg-brand-text"
+                      />
+                    )}
+                  </View>
                 </View>
               ) : (
                 <View className="items-center py-2">
@@ -953,7 +984,7 @@ export default function AuctionDetailsScreen() {
                   loading={savingEdit}
                 />
                 
-                {currentStatus !== 'cancelled' && currentStatus !== 'ended' && (
+                {currentStatus !== 'cancelled' && currentStatus !== 'ended' && currentStatus !== 'completed' && (
                   <Button
                     label="Cancel Auction Listing"
                     variant="outline"
