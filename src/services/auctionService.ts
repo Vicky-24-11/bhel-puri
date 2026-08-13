@@ -63,7 +63,9 @@ export async function getAuctions({
   page = 1,
   limit = 10,
 }: FetchAuctionsParams): Promise<Auction[]> {
-  let query = supabase.from('auctions').select('*, images:auction_images(*)');
+  let query = supabase
+    .from('auctions')
+    .select('id, seller_id, category_id, title, starting_price, current_price, minimum_bid_increment, starts_at, ends_at, status, winner_id, created_at, images:auction_images(storage_path, display_order)');
 
   // Apply filters
   if (categoryId) {

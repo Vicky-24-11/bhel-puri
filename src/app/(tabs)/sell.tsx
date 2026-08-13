@@ -3,6 +3,7 @@ import { View, Text, ScrollView, Pressable, Alert, Platform, ActivityIndicator }
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlusCircle, ChevronRight, Check, X, Camera, Info } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
 
@@ -37,6 +38,8 @@ export default function SellScreen() {
   const [customDurationHours, setCustomDurationHours] = useState('');
 
   const [publishing, setPublishing] = useState(false);
+  const [confirmAuthorized, setConfirmAuthorized] = useState(false);
+  const [confirmAuctionRules, setConfirmAuctionRules] = useState(false);
 
   // Fetch categories on mount
   useEffect(() => {
@@ -132,6 +135,26 @@ export default function SellScreen() {
       // Determine initial status based on times
       const status = 'live';
 
+      // Perform client-side image compression on native devices
+      const processedUris: string[] = [];
+      for (const uri of imageUris) {
+        if (Platform.OS === 'web') {
+          processedUris.push(uri);
+        } else {
+          try {
+            const compressed = await ImageManipulator.manipulateAsync(
+              uri,
+              [{ resize: { width: 1200 } }], // Resize large edge to 1200px max (retains aspect ratio)
+              { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+            );
+            processedUris.push(compressed.uri);
+          } catch (compressErr) {
+            console.warn('Compression failed for image, fallback to original:', compressErr);
+            processedUris.push(uri);
+          }
+        }
+      }
+
       await createAuction({
         seller_id: user.id,
         category_id: selectedCategory!.id,
@@ -144,7 +167,7 @@ export default function SellScreen() {
         ends_at: endsAt.toISOString(),
         status: status,
         winner_id: null
-      }, imageUris);
+      }, processedUris);
 
       Alert.alert('Listing Active', 'Your auction listing has been published and is now live!');
       
@@ -158,6 +181,8 @@ export default function SellScreen() {
       setDurationPreset(24);
       setIsCustomDuration(false);
       setCustomDurationHours('');
+      setConfirmAuthorized(false);
+      setConfirmAuctionRules(false);
       setStep(1);
 
       // Redirect user to explore dashboard
@@ -302,6 +327,15 @@ export default function SellScreen() {
                 </View>
               )}
 
+              {imageUris.length === 1 && (
+                <View style={{ backgroundColor: 'rgba(255, 182, 39, 0.08)' }} className="p-3 border border-amber-200 rounded-2xl flex-row gap-2 -mt-1">
+                  <Info size={14} color="#FFB627" />
+                  <Text className="flex-1 text-[9px] font-display text-brand-muted leading-relaxed">
+                    ⚠️ Listings with multiple photos receive up to 3x more bids. Add more angles if possible.
+                  </Text>
+                </View>
+              )}
+
               <View className="flex-row justify-between gap-3 mt-4">
                 <Button
                   label="Back"
@@ -333,6 +367,14 @@ export default function SellScreen() {
                 onChangeText={setTitle}
                 helperText="Must be at least 3 characters"
               />
+              {title.trim().length > 0 && title.trim().length < 10 && (
+                <View style={{ backgroundColor: 'rgba(255, 182, 39, 0.08)' }} className="p-3 border border-amber-200 rounded-2xl flex-row gap-2 -mt-2">
+                  <Info size={14} color="#FFB627" />
+                  <Text className="flex-1 text-[9px] font-display text-brand-muted leading-relaxed">
+                    ⚠️ Short titles might not attract enough bids. Try writing a descriptive title.
+                  </Text>
+                </View>
+              )}
 
               <Input
                 label="Product Description"
@@ -344,6 +386,14 @@ export default function SellScreen() {
                 className="h-24 pt-2 align-top"
                 helperText="Provide at least 10 characters to inform buyers"
               />
+              {description.trim().length > 0 && description.trim().length < 30 && (
+                <View style={{ backgroundColor: 'rgba(255, 182, 39, 0.08)' }} className="p-3 border border-amber-200 rounded-2xl flex-row gap-2 -mt-2">
+                  <Info size={14} color="#FFB627" />
+                  <Text className="flex-1 text-[9px] font-display text-brand-muted leading-relaxed">
+                    ⚠️ Detailed descriptions help bidders feel more confident. Add details about condition and features.
+                  </Text>
+                </View>
+              )}
 
               <Input
                 label="Location / City (Optional)"
@@ -383,6 +433,14 @@ export default function SellScreen() {
                 value={startingPrice}
                 onChangeText={setStartingPrice}
               />
+              {startingPrice !== '' && parseFloat(startingPrice) > 0 && parseFloat(startingPrice) < 50 && (
+                <View style={{ backgroundColor: 'rgba(255, 182, 39, 0.08)' }} className="p-3 border border-amber-200 rounded-2xl flex-row gap-2 -mt-2">
+                  <Info size={14} color="#FFB627" />
+                  <Text className="flex-1 text-[9px] font-display text-brand-muted leading-relaxed">
+                    ⚠️ The starting price seems very low. Check to make sure this is what you intended.
+                  </Text>
+                </View>
+              )}
 
               <Input
                 label="Minimum Bid Increment (₹)"
@@ -520,6 +578,37 @@ export default function SellScreen() {
                 </Text>
               </View>
 
+              {/* Confirmation Rules Panel */}
+              <View className="bg-white border border-stone-200 rounded-3xl p-4 gap-3.5 mt-1">
+                <Text className="text-xs font-display font-extrabold text-brand-text mb-0.5">
+                  Publishing Affirmations
+                </Text>
+                
+                <Pressable
+                  onPress={() => setConfirmAuthorized(!confirmAuthorized)}
+                  className="flex-row items-start gap-3"
+                >
+                  <View className={`w-5 h-5 rounded-lg border flex items-center justify-center ${confirmAuthorized ? 'bg-brand-primary border-brand-primary' : 'border-stone-300 bg-stone-50'}`}>
+                    {confirmAuthorized && <Check size={12} color="#FFFFFF" />}
+                  </View>
+                  <Text className="flex-1 text-[11px] font-display text-brand-text leading-relaxed">
+                    I confirm that I am authorized to sell this item and the information provided is accurate.
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => setConfirmAuctionRules(!confirmAuctionRules)}
+                  className="flex-row items-start gap-3"
+                >
+                  <View className={`w-5 h-5 rounded-lg border flex items-center justify-center ${confirmAuctionRules ? 'bg-brand-primary border-brand-primary' : 'border-stone-300 bg-stone-50'}`}>
+                    {confirmAuctionRules && <Check size={12} color="#FFFFFF" />}
+                  </View>
+                  <Text className="flex-1 text-[11px] font-display text-brand-text leading-relaxed">
+                    I agree to the auction rules: listing details cannot be changed once live, bids are binding, and bidding on my own listings is strictly forbidden.
+                  </Text>
+                </Pressable>
+              </View>
+
               {publishing ? (
                 <View className="py-4 items-center gap-2">
                   <ActivityIndicator size="small" color="#FF6B35" />
@@ -535,6 +624,7 @@ export default function SellScreen() {
                   />
                   <Button
                     label="Publish Auction"
+                    disabled={!confirmAuthorized || !confirmAuctionRules}
                     onPress={handlePublish}
                     className="flex-1"
                   />

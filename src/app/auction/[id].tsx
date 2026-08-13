@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, Alert, Platform, Modal } from 'react-native';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, Alert, Platform, Modal, TextInput } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
+import Head from 'expo-router/head';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, MapPin, ShieldCheck, Heart, Share2, Gavel, Settings, X, Users, MessageSquare, AlertCircle } from 'lucide-react-native';
+import { ArrowLeft, MapPin, ShieldCheck, Heart, Gavel, Settings, X, Users, MessageSquare, AlertCircle, MoreVertical, ShieldAlert, UserX } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
 
@@ -12,6 +13,7 @@ import { joinAuction, leaveAuction, getUserParticipation } from '@/services/auct
 import { placeBid } from '@/services/bidService';
 import { finalizeAuction } from '@/services/auctionFinalizationService';
 import { createAuctionConversation } from '@/services/chatService';
+import { submitReport, blockUser } from '@/services/moderationService';
 import { useAuctionRealtime } from '@/hooks/useAuctionRealtime';
 import { useAuctionCountdown } from '@/hooks/useAuctionCountdown';
 import { Button } from '@/components/ui/Button';
@@ -44,6 +46,16 @@ export default function AuctionDetailsScreen() {
   const [participant, setParticipant] = useState<AuctionParticipant | null>(null);
   const [joining, setJoining] = useState(false);
   const [initiatingChat, setInitiatingChat] = useState(false);
+
+  // Safety & Moderation modal states
+  const [showSafetyMenu, setShowSafetyMenu] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState<'fake_item'|'scam'|'prohibited_item'|'misleading_information'|'offensive_content'|'duplicate_listing'|'harassment'|'spam'|'other'|null>(null);
+  const [reportDescription, setReportDescription] = useState('');
+  const [submittingReport, setSubmittingReport] = useState(false);
+
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [blockingUser, setBlockingUser] = useState(false);
 
   // Watchlist check
   const [isWatched, setIsWatched] = useState(false);
@@ -206,6 +218,37 @@ export default function AuctionDetailsScreen() {
       Alert.alert('Unable to Contact', err.message);
     } finally {
       setInitiatingChat(false);
+    }
+  };
+
+  const handleReportSubmit = async () => {
+    if (!reportReason || !auction || !user) return;
+    setSubmittingReport(true);
+    try {
+      await submitReport('auction', auction.id, reportReason, reportDescription);
+      Alert.alert('Report Submitted', "Thanks. We've received your report.");
+      setShowReportModal(false);
+      setReportReason(null);
+      setReportDescription('');
+    } catch (err: any) {
+      Alert.alert('Report Failed', err.message || 'Unable to submit report.');
+    } finally {
+      setSubmittingReport(false);
+    }
+  };
+
+  const handleBlockSeller = async () => {
+    if (!auction?.seller_id || !user) return;
+    setBlockingUser(true);
+    try {
+      await blockUser(auction.seller_id);
+      Alert.alert('User Blocked', 'User blocked.');
+      setShowBlockModal(false);
+      router.back();
+    } catch (err: any) {
+      Alert.alert('Block Failed', err.message || 'Unable to block user.');
+    } finally {
+      setBlockingUser(false);
     }
   };
 
@@ -400,6 +443,17 @@ export default function AuctionDetailsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-brand-background">
+      {Platform.OS === 'web' && auction && (
+        <Head>
+          <title>{`${auction.title} | Bhel Puri`}</title>
+          <meta name="description" content={auction.description || "Bid on live auctions!"} />
+          <meta property="og:title" content={auction.title} />
+          <meta property="og:description" content={auction.description || "Bid on live auctions!"} />
+          {auction.images && auction.images.length > 0 && (
+            <meta property="og:image" content={getAuctionImageUrl(auction.images[0].storage_path)} />
+          )}
+        </Head>
+      )}
       {/* Navigation Header */}
       <View className="px-5 py-3 flex-row items-center justify-between border-b border-stone-200 bg-white">
         <Pressable onPress={() => router.back()} className="p-2 -ml-2">
@@ -415,8 +469,8 @@ export default function AuctionDetailsScreen() {
             <Settings size={20} color="#FF6B35" />
           </Pressable>
         ) : (
-          <Pressable className="p-2 -mr-2">
-            <Share2 size={20} color="#1A1A1A" />
+          <Pressable onPress={() => setShowSafetyMenu(true)} className="p-2 -mr-2">
+            <MoreVertical size={20} color="#1A1A1A" />
           </Pressable>
         )}
       </View>
@@ -911,6 +965,174 @@ export default function AuctionDetailsScreen() {
             </View>
           </ScrollView>
         </SafeAreaView>
+      </Modal>
+
+      {/* Safety Actions Bottom Sheet Modal */}
+      <Modal
+        visible={showSafetyMenu}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSafetyMenu(false)}
+      >
+        <Pressable 
+          onPress={() => setShowSafetyMenu(false)} 
+          className="flex-1 bg-black/40 justify-end"
+        >
+          <View className="bg-white rounded-t-3xl p-6 gap-4">
+            <Text className="font-display font-extrabold text-brand-text text-sm pb-1">
+              Safety Options
+            </Text>
+
+            <Pressable
+              onPress={() => {
+                setShowSafetyMenu(false);
+                setShowReportModal(true);
+              }}
+              className="flex-row items-center gap-3 py-3 border-b border-stone-100 active:opacity-75"
+            >
+              <ShieldAlert size={18} color="#FF6B35" />
+              <Text className="font-display font-semibold text-brand-text text-xs">
+                Report Listing
+              </Text>
+            </Pressable>
+
+            {!isSeller && (
+              <Pressable
+                onPress={() => {
+                  setShowSafetyMenu(false);
+                  setShowBlockModal(true);
+                }}
+                className="flex-row items-center gap-3 py-3 active:opacity-75"
+              >
+                <UserX size={18} color="#E71D36" />
+                <Text className="font-display font-semibold text-brand-error text-xs">
+                  Block Seller
+                </Text>
+              </Pressable>
+            )}
+
+            <Button
+              label="Cancel"
+              variant="outline"
+              onPress={() => setShowSafetyMenu(false)}
+              className="mt-2"
+            />
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Report Modal */}
+      <Modal
+        visible={showReportModal}
+        animationType="slide"
+        onRequestClose={() => setShowReportModal(false)}
+      >
+        <SafeAreaView className="flex-1 bg-brand-background">
+          <View className="px-5 py-3 flex-row items-center border-b border-stone-200 bg-white">
+            <Pressable onPress={() => setShowReportModal(false)} className="p-2 -ml-2 mr-2">
+              <ArrowLeft size={20} color="#1A1A1A" />
+            </Pressable>
+            <Text className="text-lg font-display font-extrabold text-brand-text">
+              Report Listing
+            </Text>
+          </View>
+
+          <ScrollView className="flex-1 px-5 pt-5">
+            <Text className="font-display font-bold text-brand-text text-xs mb-3">
+              Select a reason for reporting this listing:
+            </Text>
+
+            {[
+              { key: 'fake_item', label: 'Fake or scam' },
+              { key: 'prohibited_item', label: 'Prohibited item' },
+              { key: 'misleading_information', label: 'Misleading information' },
+              { key: 'offensive_content', label: 'Offensive content' },
+              { key: 'duplicate_listing', label: 'Duplicate listing' },
+              { key: 'spam', label: 'Spam' },
+              { key: 'other', label: 'Other' }
+            ].map(opt => {
+              const isSelected = reportReason === opt.key;
+              return (
+                <Pressable
+                  key={opt.key}
+                  onPress={() => setReportReason(opt.key as any)}
+                  className={`flex-row items-center justify-between p-4 bg-white border rounded-2xl mb-2.5 ${isSelected ? 'border-brand-primary' : 'border-stone-200'}`}
+                >
+                  <Text className={`font-display text-xs font-semibold ${isSelected ? 'text-brand-primary' : 'text-brand-text'}`}>
+                    {opt.label}
+                  </Text>
+                  <View className={`w-4 h-4 rounded-full border items-center justify-center ${isSelected ? 'bg-brand-primary border-brand-primary' : 'border-stone-300'}`}>
+                    {isSelected && <View className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </View>
+                </Pressable>
+              );
+            })}
+
+            <Text className="font-display font-bold text-brand-text text-xs mt-3 mb-2">
+              Additional Details (Optional):
+            </Text>
+            <TextInput
+              placeholder="Provide context to help our moderation team review this item..."
+              value={reportDescription}
+              onChangeText={setReportDescription}
+              multiline
+              numberOfLines={4}
+              className="bg-white border border-stone-200 rounded-2xl p-3.5 text-xs font-display text-brand-text h-24 align-top mb-8"
+            />
+
+            {submittingReport ? (
+              <ActivityIndicator size="small" color="#FF6B35" className="py-4" />
+            ) : (
+              <Button
+                label="Submit Report"
+                disabled={!reportReason}
+                onPress={handleReportSubmit}
+                className="mb-8"
+              />
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Block Seller Confirmation Modal */}
+      <Modal
+        visible={showBlockModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowBlockModal(false)}
+      >
+        <Pressable 
+          onPress={() => setShowBlockModal(false)} 
+          className="flex-1 bg-black/40 justify-center items-center px-6"
+        >
+          <View className="bg-white rounded-3xl p-6 w-full max-w-sm gap-4">
+            <Text className="font-display font-extrabold text-brand-text text-sm">
+              Block this user?
+            </Text>
+            
+            <Text className="text-xs font-display text-brand-muted leading-relaxed">
+              {"Blocked users won't be able to contact you. Existing conversation details will be archived."}
+            </Text>
+
+            {blockingUser ? (
+              <ActivityIndicator size="small" color="#FF6B35" className="py-3" />
+            ) : (
+              <View className="flex-row gap-3 mt-1">
+                <Button
+                  label="Cancel"
+                  variant="outline"
+                  onPress={() => setShowBlockModal(false)}
+                  className="flex-1"
+                />
+                <Button
+                  label="Block"
+                  onPress={handleBlockSeller}
+                  className="flex-1 bg-brand-error"
+                />
+              </View>
+            )}
+          </View>
+        </Pressable>
       </Modal>
     </SafeAreaView>
   );
