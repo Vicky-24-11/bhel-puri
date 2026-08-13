@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable, Alert, Platform, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { User, ShieldCheck, Star, Gavel, LogOut, ChevronRight, MapPin } from 'lucide-react-native';
+import { User, ShieldCheck, Star, Gavel, LogOut, ChevronRight, MapPin, ShieldAlert } from 'lucide-react-native';
 import { router } from 'expo-router';
 
 import { Button } from '@/components/ui/Button';
@@ -55,6 +55,7 @@ export default function ProfileScreen() {
     { label: 'Edit Profile', icon: User, action: () => router.push('/edit-profile' as any) },
     { label: 'My Active Listings', icon: Gavel, action: () => router.push('/my-auctions' as any) },
     { label: 'Won Handover Coordinates', count: 0, icon: ShieldCheck, action: () => handleMenuPress('Won Handover Coordinates') },
+    { label: 'Privacy & Safety', icon: ShieldAlert, action: () => router.push('/privacy-safety' as any) },
   ];
 
   return (

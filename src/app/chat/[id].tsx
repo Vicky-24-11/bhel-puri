@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, Pressable, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, Alert, FlatList, AppState, AppStateStatus } from 'react-native';
+import { View, Text, Pressable, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, Alert, FlatList, AppState, AppStateStatus, Modal } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Send, ShieldCheck, AlertCircle, ShoppingBag } from 'lucide-react-native';
+import { ArrowLeft, Send, ShieldCheck, AlertCircle, ShoppingBag, UserX } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -11,7 +11,9 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { getAuctionImageUrl } from '@/services/auctionService';
 import { getMessages, sendMessage, markConversationMessagesRead } from '@/services/chatService';
+import { blockUser } from '@/services/moderationService';
 import { Conversation, Message } from '@/types/database.types';
+import { Button } from '@/components/ui/Button';
 
 // ES6 Haptics import
 import * as Haptics from 'expo-haptics';
@@ -31,6 +33,11 @@ export default function ChatScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
+
+  // Block states
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [blockingUser, setBlockingUser] = useState(false);
 
   // References
   const chatChannelRef = useRef<RealtimeChannel | null>(null);
@@ -74,6 +81,14 @@ export default function ChatScreen() {
           data.auction.primary_image_url = sortedImgs[0].storage_path;
         }
         setConversation(data as Conversation);
+
+        // Check if a block exists between seller and winner
+        const { data: blocks } = await supabase
+          .from('blocked_users')
+          .select('id')
+          .or(`and(blocker_id.eq.${data.seller_id},blocked_id.eq.${data.winner_id}),and(blocker_id.eq.${data.winner_id},blocked_id.eq.${data.seller_id})`);
+        
+        setIsBlocked(blocks && blocks.length > 0 ? true : false);
       }
     } catch (err: any) {
       console.error('Error fetching conversation metadata:', err);
@@ -197,7 +212,7 @@ export default function ChatScreen() {
 
   const handleSend = async () => {
     const cleanText = inputText.trim();
-    if (!cleanText || sending || !id || !isOnline) return;
+    if (!cleanText || sending || !id || !isOnline || isBlocked) return;
 
     setSending(true);
     try {
@@ -214,6 +229,22 @@ export default function ChatScreen() {
       Alert.alert('Send Failure', err.message || 'Couldn\'t send message. Try again.');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleBlockParticipant = async () => {
+    if (!otherUser?.id) return;
+    setBlockingUser(true);
+    try {
+      triggerHaptic();
+      await blockUser(otherUser.id);
+      setIsBlocked(true);
+      setShowBlockModal(false);
+      Alert.alert('User Blocked', 'User blocked.');
+    } catch (err: any) {
+      Alert.alert('Block Failed', err.message || 'Unable to block user.');
+    } finally {
+      setBlockingUser(false);
     }
   };
 
@@ -264,6 +295,12 @@ export default function ChatScreen() {
             </Text>
           </View>
         </View>
+
+        {otherUser && !isBlocked && (
+          <Pressable onPress={() => setShowBlockModal(true)} className="p-2 -mr-2 ml-1 active:opacity-75">
+            <UserX size={18} color="#E71D36" />
+          </Pressable>
+        )}
       </View>
 
       {/* Offline Status banner */}
@@ -388,30 +425,79 @@ export default function ChatScreen() {
         />
 
         {/* Input Text Composer */}
-        <View className="p-4 border-t border-stone-200 bg-white flex-row items-center gap-3">
-          <View className="flex-1 bg-stone-50 border border-stone-200 rounded-3xl px-4 h-12 flex-row items-center">
-            <TextInput
-              placeholder={isOnline ? "Type a message..." : "Disconnected"}
-              value={inputText}
-              onChangeText={setInputText}
-              editable={!sending && isOnline}
-              maxLength={2000}
-              className="flex-1 h-full font-display text-xs text-brand-text p-0 m-0 bg-transparent"
-            />
+        {isBlocked ? (
+          <View style={{ backgroundColor: '#F8F9FA' }} className="p-4 border-t border-stone-200 items-center justify-center h-14">
+            <Text className="text-xs font-display font-bold text-brand-muted">
+              This conversation is unavailable.
+            </Text>
           </View>
+        ) : (
+          <View className="p-4 border-t border-stone-200 bg-white flex-row items-center gap-3">
+            <View className="flex-1 bg-stone-50 border border-stone-200 rounded-3xl px-4 h-12 flex-row items-center">
+              <TextInput
+                placeholder={isOnline ? "Type a message..." : "Disconnected"}
+                value={inputText}
+                onChangeText={setInputText}
+                editable={!sending && isOnline}
+                maxLength={2000}
+                className="flex-1 h-full font-display text-xs text-brand-text p-0 m-0 bg-transparent"
+              />
+            </View>
 
-          <Pressable
-            onPress={handleSend}
-            disabled={!inputText.trim() || sending || !isOnline}
-            className={`w-12 h-12 rounded-full items-center justify-center ${inputText.trim() && isOnline ? 'bg-brand-primary active:bg-brand-primary/95' : 'bg-stone-100'}`}
+            <Pressable
+              onPress={handleSend}
+              disabled={!inputText.trim() || sending || !isOnline}
+              className={`w-12 h-12 rounded-full items-center justify-center ${inputText.trim() && isOnline ? 'bg-brand-primary active:bg-brand-primary/95' : 'bg-stone-100'}`}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Send size={16} color={inputText.trim() && isOnline ? '#FFFFFF' : '#B2BEC3'} />
+              )}
+            </Pressable>
+          </View>
+        )}
+
+        {/* Block Confirmation Modal Overlay */}
+        <Modal
+          visible={showBlockModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowBlockModal(false)}
+        >
+          <Pressable 
+            onPress={() => setShowBlockModal(false)} 
+            className="flex-1 bg-black/40 justify-center items-center px-6"
           >
-            {sending ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Send size={16} color={inputText.trim() && isOnline ? '#FFFFFF' : '#B2BEC3'} />
-            )}
+            <View className="bg-white rounded-3xl p-6 w-full max-w-sm gap-4">
+              <Text className="font-display font-extrabold text-brand-text text-sm">
+                Block this user?
+              </Text>
+              
+              <Text className="text-xs font-display text-brand-muted leading-relaxed">
+                {"Blocked users won't be able to contact you. Existing conversation details will be archived."}
+              </Text>
+
+              {blockingUser ? (
+                <ActivityIndicator size="small" color="#FF6B35" className="py-3" />
+              ) : (
+                <View className="flex-row gap-3 mt-1">
+                  <Button
+                    label="Cancel"
+                    variant="outline"
+                    onPress={() => setShowBlockModal(false)}
+                    className="flex-1"
+                  />
+                  <Button
+                    label="Block"
+                    onPress={handleBlockParticipant}
+                    className="flex-1 bg-brand-error"
+                  />
+                </View>
+              )}
+            </View>
           </Pressable>
-        </View>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
