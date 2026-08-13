@@ -87,12 +87,18 @@ export function useAuctionRealtime(auctionId: string) {
         if (payload) {
           setAuction((prev) => {
             if (!prev) return null;
+            const isReverse = prev.auction_type === 'reverse';
+            const newPrice = Number(payload.current_price);
+            const isValidUpdate = isReverse
+              ? newPrice <= prev.current_price
+              : newPrice >= prev.current_price;
+            
             // Prevent overwriting with older state if events are received out-of-order
-            if (Number(payload.current_price) >= prev.current_price) {
+            if (isValidUpdate) {
               console.log(`[Realtime][Current Price] Updating current price to ₹${payload.current_price} from auction update`);
               return {
                 ...prev,
-                current_price: Number(payload.current_price),
+                current_price: newPrice,
                 highest_bidder_id: payload.highest_bidder_id,
                 status: payload.status as any,
                 winner_id: payload.winner_id,
@@ -113,16 +119,22 @@ export function useAuctionRealtime(auctionId: string) {
             if (active) setBids(newBids);
           })
           .catch((err) => console.error('Error updating realtime bids list:', err.message));
-
-        // Update current price if new bid is greater than local current price
+ 
+        // Update current price if new bid is valid compared to local current price
         if (newBid) {
           setAuction((prev) => {
             if (!prev) return null;
-            if (Number(newBid.amount) > prev.current_price) {
+            const isReverse = prev.auction_type === 'reverse';
+            const newAmount = Number(newBid.amount);
+            const isValidAmount = isReverse
+              ? newAmount < prev.current_price
+              : newAmount > prev.current_price;
+
+            if (isValidAmount) {
               console.log(`[Realtime][Current Price] Updating current price to ₹${newBid.amount} from bid insert`);
               return {
                 ...prev,
-                current_price: Number(newBid.amount),
+                current_price: newAmount,
                 highest_bidder_id: newBid.bidder_id,
               };
             }

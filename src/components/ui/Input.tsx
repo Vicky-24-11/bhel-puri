@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Text, TextInput, TextInputProps, View } from 'react-native';
+import React, { useState } from "react";
+import { Text, TextInput, TextInputProps, View } from "react-native";
 
 export interface InputProps extends TextInputProps {
   label?: string;
@@ -16,10 +16,10 @@ export const Input: React.FC<InputProps> = ({
   helperText,
   leftIcon,
   rightIcon,
-  containerClassName = '',
+  containerClassName = "",
   onFocus,
   onBlur,
-  className = '',
+  className = "",
   ...props
 }) => {
   const [isFocused, setIsFocused] = useState(false);
@@ -36,12 +36,12 @@ export const Input: React.FC<InputProps> = ({
 
   // Border and background state colors
   const borderStyle = error
-    ? 'border-brand-error'
+    ? "border-brand-error"
     : isFocused
-    ? 'border-brand-primary'
-    : 'border-brand-muted/30';
+      ? "border-brand-primary"
+      : "border-brand-muted/30";
 
-  const bgStyle = isFocused ? 'bg-white' : 'bg-stone-50';
+  const bgStyle = isFocused ? "bg-white" : "bg-stone-50";
 
   return (
     <View className={`w-full mb-4 ${containerClassName}`}>
