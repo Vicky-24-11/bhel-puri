@@ -159,6 +159,7 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!id || !user) return;
     let active = true;
+    let isSubscribed = false;
 
     const channel = supabase
       .channel(`chat_messages_${id}`)
@@ -198,7 +199,15 @@ export default function ChatScreen() {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          if (isSubscribed && active) {
+            console.log('[Realtime][Chat] Reconnected. Re-fetching messages...');
+            refreshAll();
+          }
+          isSubscribed = true;
+        }
+      });
 
     chatChannelRef.current = channel;
 
@@ -208,7 +217,7 @@ export default function ChatScreen() {
         supabase.removeChannel(chatChannelRef.current);
       }
     };
-  }, [id, user]);
+  }, [id, user, refreshAll]);
 
   const handleSend = async () => {
     const cleanText = inputText.trim();

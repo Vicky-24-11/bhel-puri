@@ -41,6 +41,7 @@ export default function ExploreScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Debounce search query
   useEffect(() => {
@@ -67,8 +68,11 @@ export default function ExploreScreen() {
   // Primary listings loader
   const loadListings = useCallback(
     async (pageNum: number, clearExisting = false) => {
-      if (pageNum === 1) setLoading(true);
-      else setLoadingMore(true);
+      if (pageNum === 1) {
+        if (!clearExisting) setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
 
       try {
         const categoryId = selectedCategory
@@ -81,7 +85,7 @@ export default function ExploreScreen() {
           searchQuery: debouncedSearch,
           sortBy,
           page: pageNum,
-          limit: 10,
+          limit: 20,
         });
 
         if (clearExisting) {
@@ -89,7 +93,7 @@ export default function ExploreScreen() {
         } else {
           setListings((prev) => [...prev, ...results]);
         }
-        setHasMore(results.length === 10);
+        setHasMore(results.length === 20);
       } catch (err) {
         console.error('Error loading explore listings:', err);
       } finally {
@@ -108,10 +112,17 @@ export default function ExploreScreen() {
 
   // Fetch next page on scroll
   const handleLoadMore = () => {
-    if (loadingMore || !hasMore || loading) return;
+    if (loadingMore || !hasMore || loading || refreshing) return;
     const nextPage = page + 1;
     setPage(nextPage);
     loadListings(nextPage, false);
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setPage(1);
+    await loadListings(1, true);
+    setRefreshing(false);
   };
 
   // Dynamic icon helper for categories
@@ -323,6 +334,8 @@ export default function ExploreScreen() {
         }
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.4}
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
       />
     </SafeAreaView>
   );

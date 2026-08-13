@@ -74,6 +74,8 @@ export function useAuctionRealtime(auctionId: string) {
   useEffect(() => {
     let active = true;
 
+    let isSubscribed = false;
+
     // Load static values
     fetchInitialData();
 
@@ -136,10 +138,23 @@ export function useAuctionRealtime(auctionId: string) {
           })
           .catch((err) => console.error('Error updating participant count:', err.message));
       },
+      onStatusChange: (status) => {
+        if (!active) return;
+        console.log(`[Realtime][Auction Status] Subscription status: ${status}`);
+        if (status === 'SUBSCRIBED') {
+          if (isSubscribed) {
+            console.log(`[Realtime][Auction Reconnect] Resynchronizing auction state...`);
+            refresh();
+          }
+          isSubscribed = true;
+          setIsConnected(true);
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setIsConnected(false);
+        }
+      }
     });
 
     channelRef.current = channel;
-    setIsConnected(true);
 
     return () => {
       active = false;
@@ -147,7 +162,7 @@ export function useAuctionRealtime(auctionId: string) {
         supabase.removeChannel(channelRef.current);
       }
     };
-  }, [auctionId, fetchInitialData]);
+  }, [auctionId, fetchInitialData, refresh]);
 
   return {
     auction,

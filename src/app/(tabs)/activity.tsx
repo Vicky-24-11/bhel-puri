@@ -98,6 +98,8 @@ export default function ActivityScreen() {
   useEffect(() => {
     if (!user) return;
     let active = true;
+    let isMsgSubscribed = false;
+    let isNotifSubscribed = false;
 
     // A. Subscribe to any insert/update on the messages table to update inbox snippet and unread count
     const msgChannel = supabase
@@ -113,7 +115,15 @@ export default function ActivityScreen() {
           if (active) loadInbox();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          if (isMsgSubscribed && active) {
+            console.log('[Realtime][Activity] Reconnected. Re-fetching inbox...');
+            loadInbox();
+          }
+          isMsgSubscribed = true;
+        }
+      });
     msgChannelRef.current = msgChannel;
 
     // B. Subscribe to notifications updates specifically scoped to current user
@@ -131,7 +141,15 @@ export default function ActivityScreen() {
           if (active) loadAlerts();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          if (isNotifSubscribed && active) {
+            console.log('[Realtime][Activity] Reconnected. Re-fetching alerts...');
+            loadAlerts();
+          }
+          isNotifSubscribed = true;
+        }
+      });
     notifChannelRef.current = notifChannel;
 
     return () => {
