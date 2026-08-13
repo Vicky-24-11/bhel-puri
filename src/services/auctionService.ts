@@ -50,6 +50,7 @@ export interface FetchAuctionsParams {
   sortBy?: 'newest' | 'ending_soon' | 'starting_soon' | 'price_low' | 'price_high';
   page?: number;
   limit?: number;
+  auctionType?: 'forward' | 'reverse' | null;
 }
 
 /**
@@ -62,10 +63,11 @@ export async function getAuctions({
   sortBy = 'newest',
   page = 1,
   limit = 10,
+  auctionType,
 }: FetchAuctionsParams): Promise<Auction[]> {
   let query = supabase
     .from('auctions')
-    .select('id, seller_id, category_id, title, starting_price, current_price, minimum_bid_increment, starts_at, ends_at, status, winner_id, created_at, images:auction_images(storage_path, display_order)');
+    .select('id, seller_id, category_id, title, starting_price, current_price, minimum_bid_increment, starts_at, ends_at, status, winner_id, created_at, auction_type, minimum_price, images:auction_images(storage_path, display_order), bids(count)');
 
   // Apply filters
   if (categoryId) {
@@ -76,6 +78,9 @@ export async function getAuctions({
   } else {
     // Default: only show live and scheduled/upcoming auctions publicly
     query = query.in('status', ['live', 'scheduled']);
+  }
+  if (auctionType) {
+    query = query.eq('auction_type', auctionType);
   }
   if (searchQuery?.trim()) {
     query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
@@ -112,6 +117,7 @@ export async function getAuctions({
     return {
       ...auc,
       primary_image_url: primaryImg ? getAuctionImageUrl(primaryImg.storage_path) : undefined,
+      bid_count: auc.bids?.[0]?.count || 0,
     };
   });
 

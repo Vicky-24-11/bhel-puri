@@ -33,6 +33,7 @@ export default function ExploreScreen() {
   
   // Advanced filters state
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'live' | 'scheduled'>('all');
+  const [auctionTypeFilter, setAuctionTypeFilter] = useState<'all' | 'forward' | 'reverse'>('all');
   const [sortBy, setSortBy] = useState<FetchAuctionsParams['sortBy']>('newest');
   const [showFiltersModal, setShowFiltersModal] = useState(false);
 
@@ -91,6 +92,7 @@ export default function ExploreScreen() {
           sortBy,
           page: pageNum,
           limit: 20,
+          auctionType: auctionTypeFilter === 'all' ? null : auctionTypeFilter,
         });
 
         if (clearExisting) {
@@ -106,14 +108,14 @@ export default function ExploreScreen() {
         setLoadingMore(false);
       }
     },
-    [selectedCategory, selectedStatus, debouncedSearch, sortBy, categories]
+    [selectedCategory, selectedStatus, auctionTypeFilter, debouncedSearch, sortBy, categories]
   );
 
   // Reload listings on filter/search change
   useEffect(() => {
     setPage(1);
     loadListings(1, true);
-  }, [selectedCategory, selectedStatus, debouncedSearch, sortBy, loadListings]);
+  }, [selectedCategory, selectedStatus, auctionTypeFilter, debouncedSearch, sortBy, loadListings]);
 
   // Fetch next page on scroll
   const handleLoadMore = () => {
@@ -170,7 +172,8 @@ export default function ExploreScreen() {
               starts_at={item.starts_at}
               category_name={categories.find((c) => c.id === item.category_id)?.name}
               status={item.status}
-              bid_count={0} // bidding to be added in Phase 4
+              bid_count={item.bid_count}
+              auction_type={item.auction_type}
               primary_image_url={item.primary_image_url}
             />
           </View>
@@ -242,6 +245,30 @@ export default function ExploreScreen() {
                   );
                 })}
               </ScrollView>
+            </View>
+
+            {/* Auction Type Filter Row */}
+            <View className="px-5 mb-3 flex-row gap-2">
+              {([
+                { label: 'All', value: 'all' },
+                { label: '🔨 Sell Auctions', value: 'forward' },
+                { label: '🔄 Buy Requests', value: 'reverse' },
+              ] as const).map((item) => {
+                const isActive = auctionTypeFilter === item.value;
+                return (
+                  <Pressable
+                    key={item.value}
+                    onPress={() => setAuctionTypeFilter(item.value)}
+                    className={`flex-1 py-2.5 rounded-2xl border items-center justify-center shadow-sm ${
+                      isActive ? 'bg-brand-primary border-brand-primary' : 'bg-white border-stone-200'
+                    }`}
+                  >
+                    <Text className={`text-xs font-display font-bold ${isActive ? 'text-white' : 'text-brand-text'}`}>
+                      {item.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
 
             {/* Detailed Filters Modal / Row Panel */}
