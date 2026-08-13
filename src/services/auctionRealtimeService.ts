@@ -11,6 +11,7 @@ export interface RealtimeHandlers {
   }) => void;
   onNewBid?: (bid: any) => void;
   onParticipantChange?: () => void;
+  onStatusChange?: (status: string) => void;
 }
 
 /**
@@ -66,6 +67,9 @@ export function subscribeToAuction(
     )
     .subscribe((status) => {
       console.log(`Realtime subscription for auction ${auctionId} status:`, status);
+      if (handlers.onStatusChange) {
+        handlers.onStatusChange(status);
+      }
     });
 
   return channel;
