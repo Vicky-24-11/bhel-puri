@@ -660,7 +660,12 @@ export default function AuctionDetailsScreen() {
           <View className="w-full flex-row border border-stone-200 bg-white rounded-3xl p-5 mb-6 shadow-sm">
             <View className="flex-1">
               <Text className="text-[10px] font-display text-brand-muted uppercase font-semibold tracking-wider mb-1">
-                {currentStatus === 'scheduled' ? (isReverse ? 'Max Budget' : 'Starting Price') : (isReverse ? 'Best Offer' : 'Current Bid')}
+                {currentStatus === 'scheduled'
+                  ? (isReverse ? 'Max Budget' : 'Starting Price')
+                  : (currentStatus === 'ended' || currentStatus === 'completed')
+                    ? (auction.winner_id ? 'Final Price' : 'Unsold')
+                    : (isReverse ? 'Best Offer' : 'Current Bid')
+                }
               </Text>
               <PriceDisplay amount={auction.current_price} size="xl" className="text-brand-text" />
               <Text className="text-[10px] font-display text-brand-muted mt-1">
@@ -807,16 +812,48 @@ export default function AuctionDetailsScreen() {
 
           {/* Post-Auction Coordination Panel */}
           {(currentStatus === 'ended' || currentStatus === 'completed') && (
-            <View className="mb-6 bg-white border border-stone-200 p-5 rounded-3xl shadow-sm gap-3">
+            <Animated.View
+              entering={FadeInUp.duration(400)}
+              className="mb-6 bg-white border border-stone-200 p-5 rounded-3xl shadow-sm gap-3"
+            >
               {isSeller ? (
                 auction.winner ? (
                   <View className="items-center py-1">
                     <Text className="text-base font-display font-bold text-brand-text mb-1">
                       {isReverse ? '🎉 Buy Request Fulfilled!' : '🎉 Your Listing Sold!'}
                     </Text>
-                    <Text className="text-xs font-display text-brand-muted text-center max-w-sm leading-relaxed mb-4">
-                      {isReverse ? 'Winning Offer' : 'Winning Bid'}: <Text className="font-bold text-brand-text">₹{auction.current_price.toLocaleString('en-IN')}</Text> by <Text className="font-bold text-brand-text">@{auction.winner.username}</Text>.
+                    <Text className="text-xs font-display text-brand-muted text-center max-w-sm leading-relaxed mb-1">
+                      You can now coordinate message details with the participant.
                     </Text>
+
+                    {/* Seller Metadata Table */}
+                    <View className="w-full bg-stone-50 border border-stone-100 rounded-2xl p-4 my-3 gap-2">
+                      <View className="flex-row justify-between border-b border-stone-200/50 pb-1.5">
+                        <Text className="text-xs font-display text-brand-muted">Auction Type</Text>
+                        <Text className="text-xs font-display font-semibold text-brand-text">
+                          {isReverse ? 'Reverse Auction (Buy Request)' : 'Forward Auction (Standard)'}
+                        </Text>
+                      </View>
+                      <View className="flex-row justify-between border-b border-stone-200/50 pb-1.5">
+                        <Text className="text-xs font-display text-brand-muted">Winner</Text>
+                        <Text className="text-xs font-display font-semibold text-brand-text">
+                          {auction.winner.full_name || `@${auction.winner.username}`}
+                        </Text>
+                      </View>
+                      <View className="flex-row justify-between border-b border-stone-200/50 pb-1.5">
+                        <Text className="text-xs font-display text-brand-muted">Winning Price</Text>
+                        <Text className="text-xs font-display font-bold text-brand-primary">
+                          ₹{auction.current_price.toLocaleString('en-IN')}
+                        </Text>
+                      </View>
+                      <View className="flex-row justify-between">
+                        <Text className="text-xs font-display text-brand-muted">Status</Text>
+                        <Text className="text-xs font-display font-semibold text-emerald-600">
+                          Completed
+                        </Text>
+                      </View>
+                    </View>
+
                     <View className="w-full gap-2">
                       <Button
                         label={isReverse ? 'Contact Seller' : 'Contact Winner'}
@@ -840,9 +877,14 @@ export default function AuctionDetailsScreen() {
                     <Text className="text-sm font-display font-bold text-brand-text mb-1">
                       {isReverse ? 'Request Finished' : 'Auction Finished'}
                     </Text>
-                    <Text className="text-xs font-display text-brand-muted text-center max-w-sm leading-relaxed">
-                      {isReverse ? 'No offers were placed on this request.' : 'No bids were placed on this listing. You can clone or republish it.'}
+                    <Text className="text-xs font-display text-brand-muted text-center max-w-sm leading-relaxed mb-2">
+                      {isReverse ? 'No offers were placed on this request.' : 'No bids were placed on this listing.'}
                     </Text>
+                    <View className="w-full bg-stone-50 border border-stone-100 rounded-2xl p-4 my-1 items-center">
+                      <Text className="text-xs font-display text-brand-muted">
+                        No winner was assigned for this auction.
+                      </Text>
+                    </View>
                   </View>
                 )
               ) : auction.winner_id === user?.id ? (
@@ -850,13 +892,35 @@ export default function AuctionDetailsScreen() {
                   <Text className="text-base font-display font-bold text-emerald-600 mb-1">
                     {isReverse ? '🎉 Your Offer Won!' : '🎉 You Won This Auction!'}
                   </Text>
-                  <Text className="text-xs font-display text-brand-muted text-center max-w-sm leading-relaxed mb-4">
+                  <Text className="text-xs font-display text-brand-muted text-center max-w-sm leading-relaxed mb-1">
                     {isReverse 
-                      ? 'Your winning offer was '
-                      : 'Your winning bid was '
+                      ? 'You won the buy request with the lowest offer.'
+                      : 'You won the auction with the highest bid.'
                     }
-                    <Text className="font-bold text-brand-text">₹{auction.current_price.toLocaleString('en-IN')}</Text>. Connect with the buyer <Text className="font-bold text-brand-text">@{auction.seller?.username}</Text> to complete transaction terms.
                   </Text>
+
+                  {/* Winner Metadata Table */}
+                  <View className="w-full bg-stone-50 border border-stone-100 rounded-2xl p-4 my-3 gap-2">
+                    <View className="flex-row justify-between border-b border-stone-200/50 pb-1.5">
+                      <Text className="text-xs font-display text-brand-muted">Seller</Text>
+                      <Text className="text-xs font-display font-semibold text-brand-text">
+                        {auction.seller?.full_name || `@${auction.seller?.username}`}
+                      </Text>
+                    </View>
+                    <View className="flex-row justify-between border-b border-stone-200/50 pb-1.5">
+                      <Text className="text-xs font-display text-brand-muted">Winning Price</Text>
+                      <Text className="text-xs font-display font-bold text-brand-primary">
+                        ₹{auction.current_price.toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                    <View className="flex-row justify-between">
+                      <Text className="text-xs font-display text-brand-muted">Bidding Summary</Text>
+                      <Text className="text-xs font-display font-semibold text-emerald-600">
+                        {isReverse ? 'Won with lowest offer' : 'Won with highest bid'}
+                      </Text>
+                    </View>
+                  </View>
+
                   <View className="w-full gap-2">
                     <Button
                       label={isReverse ? 'Contact Buyer' : 'Contact Seller'}
@@ -883,9 +947,12 @@ export default function AuctionDetailsScreen() {
                   <Text className="text-xs font-display text-brand-muted text-center max-w-sm leading-relaxed">
                     This request has ended. The winning offer was <Text className="font-bold text-brand-text">₹{auction.current_price.toLocaleString('en-IN')}</Text>.
                   </Text>
+                  <Text className="text-xs font-display font-semibold text-brand-error text-center mt-3 bg-brand-error/5 border border-brand-error/10 py-1.5 px-4 rounded-xl">
+                    You didn&apos;t win this auction.
+                  </Text>
                 </View>
               )}
-            </View>
+            </Animated.View>
           )}
 
           {/* Bid History Segment */}

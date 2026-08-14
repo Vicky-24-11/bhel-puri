@@ -97,9 +97,10 @@ export function useAuctionRealtime(auctionId: string) {
             if (!prev) return null;
             const isReverse = prev.auction_type === 'reverse';
             const newPrice = Number(payload.current_price);
-            const isValidUpdate = isReverse
+            const statusChanged = payload.status !== prev.status;
+            const isValidUpdate = statusChanged || (isReverse
               ? newPrice <= prev.current_price
-              : newPrice >= prev.current_price;
+              : newPrice >= prev.current_price);
             
             // Prevent overwriting with older state if events are received out-of-order
             if (isValidUpdate) {
