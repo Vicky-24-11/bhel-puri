@@ -40,8 +40,8 @@ export default function HomeScreen() {
       try {
         const [cats, recent, ending] = await Promise.all([
           getCategories(),
-          getAuctions({ status: 'live', sortBy: 'newest', limit: 6 }),
-          getAuctions({ status: 'live', sortBy: 'ending_soon', limit: 6 }),
+          getAuctions({ status: "live", sortBy: "newest", limit: 6 }),
+          getAuctions({ status: "live", sortBy: "ending_soon", limit: 6 }),
         ]);
 
         if (!active) return;
@@ -50,7 +50,7 @@ export default function HomeScreen() {
         setRecentAuctions(recent);
         setEndingSoonAuctions(ending);
       } catch (err) {
-        console.error('Error loading home data:', err);
+        console.error("Error loading home data:", err);
       } finally {
         if (active) {
           setLoadingCategories(false);
@@ -97,7 +97,7 @@ export default function HomeScreen() {
   const displayName = profile?.full_name || profile?.username || "Guest";
 
   return (
-    <SafeAreaView className="flex-1 bg-brand-background">
+    <SafeAreaView className="flex-1 bg-brand-background ">
       {/* 1. Header Area */}
       <View className="px-5 pt-3 pb-2 flex-row justify-between items-center">
         <View>
@@ -136,8 +136,8 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
-        <View className="w-full max-w-5xl mx-auto px-5 pb-12">
+      <ScrollView showsVerticalScrollIndicator={false} className="flex-1 ">
+        <View className="w-full max-w-5xl mx-auto px-5 pb-12 ">
           {/* 2. Personalised Greeting */}
           <View className="mb-4 mt-5">
             <Text className="text-sm font-display font-medium text-brand-muted">

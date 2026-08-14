@@ -41,6 +41,7 @@ export default function AuctionDetailsScreen() {
     loading,
     error: errorMsg,
     isConnected,
+    isConnectionLost,
     refresh,
   } = useAuctionRealtime(id || '');
 
@@ -577,7 +578,15 @@ export default function AuctionDetailsScreen() {
                     <Image
                       source={{ uri: getAuctionImageUrl(img.storage_path) }}
                       contentFit="cover"
-                      className="w-full h-full"
+                      style={{ position: 'absolute', width: '100%', height: '100%' }}
+                      onError={(e) => {
+                        console.log('[ProductImage] Native image failed', {
+                          productId: id,
+                          url: getAuctionImageUrl(img.storage_path),
+                          platform: Platform.OS,
+                          error: e.error || 'Unknown error'
+                        });
+                      }}
                     />
                   </View>
                 ))}
@@ -622,7 +631,7 @@ export default function AuctionDetailsScreen() {
         </View>
 
         {/* Offline Warning banner */}
-        {(!isOnline || !isConnected) && (
+        {(!isOnline || isConnectionLost) && (
           <View className="flex-row items-center justify-center bg-brand-error/10 border-b border-brand-error/20 py-2.5 px-4 gap-2">
             <AlertCircle size={14} color="#E71D36" />
             <Text className="text-xs font-display font-semibold text-brand-error">
@@ -942,6 +951,14 @@ export default function AuctionDetailsScreen() {
                   <Image
                     source={{ uri: auction.seller.avatar_url }}
                     className="w-10 h-10 rounded-full mr-3 border border-stone-200"
+                    onError={(e) => {
+                      console.log('[SellerAvatar] Native image failed', {
+                        sellerId: auction.seller.id,
+                        url: auction.seller.avatar_url,
+                        platform: Platform.OS,
+                        error: e.error || 'Unknown error'
+                      });
+                    }}
                   />
                 ) : (
                   <View className="w-10 h-10 bg-brand-primary/10 border border-brand-primary/20 rounded-full items-center justify-center mr-3">
