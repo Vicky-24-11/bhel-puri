@@ -9,7 +9,7 @@ import {
   Star,
   User,
 } from "lucide-react-native";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   Alert,
   Image,
@@ -24,18 +24,34 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/lib/AuthContext";
 import { signOut } from "@/services/authService";
+import { supabase } from "@/lib/supabase";
 
 export default function ProfileScreen() {
   const { user, profile } = useAuth();
+  const [createdCount, setCreatedCount] = useState<number>(0);
+  const [wonCount, setWonCount] = useState<number>(0);
 
-  const handleMenuPress = (label: string) => {
-    const msg = `This launches the "${label}" interface, synchronized via Supabase in production.`;
-    if (Platform.OS === "web") {
-      window.alert(`Bhel Puri: ${msg}`);
-    } else {
-      Alert.alert("Bhel Puri", msg);
-    }
-  };
+  useEffect(() => {
+    if (!user) return;
+
+    // Fetch Created Auctions Count
+    supabase
+      .from('auctions')
+      .select('id', { count: 'exact', head: true })
+      .eq('seller_id', user.id)
+      .then(({ count }) => {
+        if (count !== null) setCreatedCount(count);
+      });
+
+    // Fetch Won Purchases Count
+    supabase
+      .from('auctions')
+      .select('id', { count: 'exact', head: true })
+      .eq('winner_id', user.id)
+      .then(({ count }) => {
+        if (count !== null) setWonCount(count);
+      });
+  }, [user]);
 
   const handleLogout = () => {
     const action = async () => {
@@ -68,22 +84,21 @@ export default function ProfileScreen() {
     }
   };
 
-  const menuItems = [
+  const menuItems: { label: string; icon: any; count?: number; action: () => void }[] = [
     {
       label: "Edit Profile",
       icon: User,
       action: () => router.push("/edit-profile" as any),
     },
     {
-      label: "My Active Listings",
+      label: "My Sales (Listed Auctions)",
       icon: Gavel,
       action: () => router.push("/my-auctions" as any),
     },
     {
-      label: "Won Handover Coordinates",
-      count: 0,
+      label: "My Purchases (Won Auctions)",
       icon: ShieldCheck,
-      action: () => handleMenuPress("Won Handover Coordinates"),
+      action: () => router.push("/my-purchases" as any),
     },
     {
       label: "Privacy & Safety",
@@ -201,7 +216,7 @@ export default function ProfileScreen() {
             <View className="w-full flex-row justify-around border-t border-stone-100 pt-4">
               <View className="items-center">
                 <Text className="text-xl font-display font-extrabold text-brand-text">
-                  0
+                  {createdCount}
                 </Text>
                 <Text className="text-[10px] font-display text-brand-muted uppercase font-semibold mt-0.5">
                   Created
@@ -212,7 +227,7 @@ export default function ProfileScreen() {
 
               <View className="items-center">
                 <Text className="text-xl font-display font-extrabold text-brand-text">
-                  0
+                  {wonCount}
                 </Text>
                 <Text className="text-[10px] font-display text-brand-muted uppercase font-semibold mt-0.5">
                   Won

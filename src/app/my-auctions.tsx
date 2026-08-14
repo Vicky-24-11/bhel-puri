@@ -37,6 +37,9 @@ export default function MyAuctionsScreen() {
   // Filter listings based on selected tab state
   const filteredListings = listings.filter((item) => {
     const status = item.status.toLowerCase();
+    if (activeTab === 'ended') {
+      return status === 'ended' || status === 'completed';
+    }
     return status === activeTab;
   });
 
