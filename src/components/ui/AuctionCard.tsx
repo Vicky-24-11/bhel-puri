@@ -149,7 +149,16 @@ export const AuctionCard: React.FC<AuctionCardProps> = ({
             source={imageSource}
             contentFit="cover"
             transition={200}
-            className="w-full h-full"
+            style={{ position: 'absolute', width: '100%', height: '100%' }}
+            onError={(e) => {
+              console.log('[AuctionCard Image Error]', {
+                id,
+                title,
+                primary_image_url,
+                imageSource,
+                error: e.error || 'Unknown error'
+              });
+            }}
           />
         ) : (
           <View className="w-full h-full items-center justify-center bg-stone-200">

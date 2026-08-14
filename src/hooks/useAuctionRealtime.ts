@@ -24,9 +24,12 @@ export function useAuctionRealtime(auctionId: string) {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [isConnectionLost, setIsConnectionLost] = useState<boolean>(false);
+  const hasConnectedRef = useRef<boolean>(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
   const fetchInitialData = useCallback(async () => {
+    if (!auctionId) return;
     try {
       setLoading(true);
       setError(null);
@@ -54,6 +57,7 @@ export function useAuctionRealtime(auctionId: string) {
 
   // Public reload operation triggered on app resume or manual swipe pulls
   const refresh = useCallback(async () => {
+    if (!auctionId) return;
     try {
       const [aucData, bidsData, countData] = await Promise.all([
         getAuctionById(auctionId),
@@ -72,6 +76,10 @@ export function useAuctionRealtime(auctionId: string) {
   }, [auctionId]);
 
   useEffect(() => {
+    if (!auctionId) {
+      setLoading(false);
+      return;
+    }
     let active = true;
 
     let isSubscribed = false;
@@ -160,8 +168,13 @@ export function useAuctionRealtime(auctionId: string) {
           }
           isSubscribed = true;
           setIsConnected(true);
+          hasConnectedRef.current = true;
+          setIsConnectionLost(false);
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           setIsConnected(false);
+          if (hasConnectedRef.current) {
+            setIsConnectionLost(true);
+          }
         }
       }
     });
@@ -183,6 +196,7 @@ export function useAuctionRealtime(auctionId: string) {
     loading,
     error,
     isConnected,
+    isConnectionLost,
     refresh,
   };
 }
