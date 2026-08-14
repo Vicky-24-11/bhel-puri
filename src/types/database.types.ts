@@ -134,3 +134,28 @@ export interface Notification {
   auction?: Auction;
   conversation?: Conversation;
 }
+
+export interface Rating {
+  id: string;
+  auction_id: string;
+  reviewer_id: string;
+  reviewee_id: string;
+  rating_value: number;
+  comment: string | null;
+  created_at: string;
+  reviewer?: Profile;
+  auction?: Auction;
+}
+
+export interface Report {
+  id: string;
+  reporter_id: string;
+  reported_user_id: string | null;
+  auction_id: string | null;
+  message_id: string | null;
+  reason: string;
+  description: string | null;
+  status: 'pending' | 'reviewing' | 'resolved' | 'dismissed' | 'action_taken';
+  created_at: string;
+  updated_at: string;
+}

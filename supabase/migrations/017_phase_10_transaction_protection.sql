@@ -44,15 +44,15 @@ BEGIN
   END IF;
 
   -- Fetch auction title
-  SELECT title INTO v_auction_title FROM public.auctions WHERE id = new.auction_id;
+  v_auction_title := (SELECT title FROM public.auctions WHERE id = new.auction_id);
 
   -- Determine sender name and recipient ID
   IF (auth.uid() = new.seller_id) THEN
     v_recipient_id := new.buyer_id;
-    SELECT coalesce(full_name, username, 'Seller') INTO v_sender_name FROM public.profiles WHERE id = new.seller_id;
+    v_sender_name := (SELECT coalesce(full_name, username, 'Seller') FROM public.profiles WHERE id = new.seller_id);
   ELSE
     v_recipient_id := new.seller_id;
-    SELECT coalesce(full_name, username, 'Buyer') INTO v_sender_name FROM public.profiles WHERE id = new.buyer_id;
+    v_sender_name := (SELECT coalesce(full_name, username, 'Buyer') FROM public.profiles WHERE id = new.buyer_id);
   END IF;
 
   -- Safeguard against null recipient

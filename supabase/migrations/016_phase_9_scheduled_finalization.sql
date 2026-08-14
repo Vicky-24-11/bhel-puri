@@ -14,7 +14,9 @@ CREATE OR REPLACE FUNCTION public.create_auction_conversation(
 RETURNS uuid AS $$
 DECLARE
   v_user_id uuid;
-  v_auction record;
+  v_seller_id uuid;
+  v_winner_id uuid;
+  v_status text;
   v_conv_id uuid;
 BEGIN
   -- Require authentication
@@ -23,43 +25,41 @@ BEGIN
     RAISE EXCEPTION 'Authentication required. Please log in.';
   END IF;
 
-  -- Lock the auction row
-  SELECT * INTO v_auction
-  FROM public.auctions
-  WHERE id = p_auction_id;
+  -- Fetch auction attributes using assignments
+  v_seller_id := (SELECT seller_id FROM public.auctions WHERE id = p_auction_id);
+  v_winner_id := (SELECT winner_id FROM public.auctions WHERE id = p_auction_id);
+  v_status := (SELECT status FROM public.auctions WHERE id = p_auction_id);
 
-  IF NOT FOUND THEN
+  IF v_seller_id IS NULL THEN
     RAISE EXCEPTION 'Auction not found.';
   END IF;
 
   -- Verify auction is ended/completed and has a valid winner
-  IF v_auction.status NOT IN ('ended', 'completed') OR v_auction.winner_id IS NULL THEN
+  IF v_status NOT IN ('ended', 'completed') OR v_winner_id IS NULL THEN
     RAISE EXCEPTION 'Conversations can only be initiated for completed auctions with a winning bidder.';
   END IF;
 
   -- Verify caller is either the seller or the winner
-  IF v_user_id <> v_auction.seller_id AND v_user_id <> v_auction.winner_id THEN
+  IF v_user_id <> v_seller_id AND v_user_id <> v_winner_id THEN
     RAISE EXCEPTION 'Access Denied: You are not authorized to start a conversation for this listing.';
   END IF;
 
   -- Verify neither participant has blocked the other
   IF EXISTS (
     SELECT 1 FROM public.blocked_users
-    WHERE (blocker_id = v_auction.seller_id and blocked_id = v_auction.winner_id)
-       OR (blocker_id = v_auction.winner_id and blocked_id = v_auction.seller_id)
+    WHERE (blocker_id = v_seller_id and blocked_id = v_winner_id)
+       OR (blocker_id = v_winner_id and blocked_id = v_seller_id)
   ) THEN
     RAISE EXCEPTION 'Cannot create conversation. This seller or winner is currently blocked.';
   END IF;
 
-  -- Idempotently insert or retrieve conversation
-  SELECT id INTO v_conv_id
-  FROM public.conversations
-  WHERE auction_id = p_auction_id;
+  -- Idempotently retrieve or insert conversation using assignments
+  v_conv_id := (SELECT id FROM public.conversations WHERE auction_id = p_auction_id);
 
-  IF NOT FOUND THEN
+  IF v_conv_id IS NULL THEN
     INSERT INTO public.conversations (auction_id, seller_id, winner_id)
-    VALUES (p_auction_id, v_auction.seller_id, v_auction.winner_id)
-    RETURNING id INTO v_conv_id;
+    VALUES (p_auction_id, v_seller_id, v_winner_id);
+    v_conv_id := (SELECT id FROM public.conversations WHERE auction_id = p_auction_id);
   END IF;
 
   RETURN v_conv_id;
