@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { getAuctionImageUrl } from '@/services/auctionService';
 import { getMessages, sendMessage, markConversationMessagesRead } from '@/services/chatService';
 import { blockUser } from '@/services/moderationService';
+import { containsContactInformation } from '@/services/contactDetectionService';
 import { Conversation, Message } from '@/types/database.types';
 import { Button } from '@/components/ui/Button';
 
@@ -34,10 +35,11 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
 
-  // Block states
+  // Block & Warning states
   const [isBlocked, setIsBlocked] = useState(false);
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [blockingUser, setBlockingUser] = useState(false);
+  const [showSafeWarningModal, setShowSafeWarningModal] = useState(false);
 
   // References
   const chatChannelRef = useRef<RealtimeChannel | null>(null);
@@ -219,9 +221,14 @@ export default function ChatScreen() {
     };
   }, [id, user, refreshAll]);
 
-  const handleSend = async () => {
+  const handleSend = async (bypassWarning = false) => {
     const cleanText = inputText.trim();
     if (!cleanText || sending || !id || !isOnline || isBlocked) return;
+
+    if (!bypassWarning && containsContactInformation(cleanText)) {
+      setShowSafeWarningModal(true);
+      return;
+    }
 
     setSending(true);
     try {
@@ -234,6 +241,7 @@ export default function ChatScreen() {
         return [...prev, newMsg];
       });
       setInputText('');
+      setShowSafeWarningModal(false);
     } catch (err: any) {
       Alert.alert('Send Failure', err.message || 'Couldn\'t send message. Try again.');
     } finally {
@@ -454,7 +462,7 @@ export default function ChatScreen() {
             </View>
 
             <Pressable
-              onPress={handleSend}
+              onPress={() => handleSend()}
               disabled={!inputText.trim() || sending || !isOnline}
               className={`w-12 h-12 rounded-full items-center justify-center ${inputText.trim() && isOnline ? 'bg-brand-primary active:bg-brand-primary/95' : 'bg-stone-100'}`}
             >
@@ -504,6 +512,46 @@ export default function ChatScreen() {
                   />
                 </View>
               )}
+            </View>
+          </Pressable>
+        </Modal>
+
+        {/* Safe Chat Warning Modal Overlay */}
+        <Modal
+          visible={showSafeWarningModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowSafeWarningModal(false)}
+        >
+          <Pressable 
+            onPress={() => setShowSafeWarningModal(false)} 
+            className="flex-1 bg-black/40 justify-center items-center px-6"
+          >
+            <View className="bg-white rounded-3xl p-6 w-full max-w-sm gap-4">
+              <View className="flex-row items-center gap-2">
+                <ShieldCheck size={18} color="#FF6B35" />
+                <Text className="font-display font-extrabold text-brand-text text-sm">
+                  Keep your transaction safe
+                </Text>
+              </View>
+              
+              <Text className="text-xs font-display text-brand-muted leading-relaxed">
+                This message may contain personal contact information. For your safety, we recommend keeping communication inside Bhel Puri.
+              </Text>
+
+              <View className="flex-row gap-3 mt-1">
+                <Button
+                  label="Edit Message"
+                  variant="outline"
+                  onPress={() => setShowSafeWarningModal(false)}
+                  className="flex-1"
+                />
+                <Button
+                  label="Send Anyway"
+                  onPress={() => handleSend(true)}
+                  className="flex-1"
+                />
+              </View>
             </View>
           </Pressable>
         </Modal>
