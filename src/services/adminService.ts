@@ -322,7 +322,7 @@ export async function getAdminAuctions(
 ) {
   let query = supabase
     .from('auctions')
-    .select('*, seller:profiles(username, full_name), winner:profiles(username)', { count: 'exact' });
+    .select('*, seller:profiles!auctions_seller_id_fkey(username, full_name), winner:profiles!auctions_winner_id_fkey(username)', { count: 'exact' });
 
   if (typeFilter !== 'all') {
     query = query.eq('auction_type', typeFilter);
@@ -354,7 +354,7 @@ export async function getAdminTransactions(
 ) {
   let query = supabase
     .from('transactions')
-    .select('*, seller:profiles(username), buyer:profiles(username), auction:auctions(title)', { count: 'exact' });
+    .select('*, seller:profiles!transactions_seller_id_fkey(username), buyer:profiles!transactions_buyer_id_fkey(username), auction:auctions(title)', { count: 'exact' });
 
   if (statusFilter !== 'all') {
     query = query.eq('status', statusFilter);
