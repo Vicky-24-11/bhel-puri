@@ -63,10 +63,12 @@ export interface FetchAuctionsParams {
   categoryId?: string | null;
   status?: string | null;
   searchQuery?: string;
-  sortBy?: 'newest' | 'ending_soon' | 'starting_soon' | 'price_low' | 'price_high';
+  sortBy?: 'newest' | 'ending_soon' | 'starting_soon' | 'price_low' | 'price_high' | 'recommended';
   page?: number;
   limit?: number;
   auctionType?: 'forward' | 'reverse' | null;
+  minPrice?: number | null;
+  maxPrice?: number | null;
 }
 
 /**
@@ -80,6 +82,8 @@ export async function getAuctions({
   page = 1,
   limit = 10,
   auctionType,
+  minPrice,
+  maxPrice,
 }: FetchAuctionsParams): Promise<Auction[]> {
   let query = supabase
     .from('auctions')
@@ -98,8 +102,17 @@ export async function getAuctions({
   if (auctionType) {
     query = query.eq('auction_type', auctionType);
   }
+  if (minPrice !== undefined && minPrice !== null) {
+    query = query.gte('current_price', minPrice);
+  }
+  if (maxPrice !== undefined && maxPrice !== null) {
+    query = query.lte('current_price', maxPrice);
+  }
   if (searchQuery?.trim()) {
-    query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
+    const words = searchQuery.trim().split(/\s+/).filter(Boolean);
+    words.forEach((word) => {
+      query = query.or(`title.ilike.%${word}%,description.ilike.%${word}%`);
+    });
   }
 
   // Apply Sorting
@@ -113,6 +126,8 @@ export async function getAuctions({
     query = query.order('current_price', { ascending: true });
   } else if (sortBy === 'price_high') {
     query = query.order('current_price', { ascending: false });
+  } else if (sortBy === 'recommended') {
+    query = query.order('created_at', { ascending: false });
   }
 
   // Apply Range-based pagination

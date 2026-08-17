@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, Pressable, TextInput, ActivityIndicator, FlatList } from 'react-native';
+import { View, Text, ScrollView, Pressable, TextInput, ActivityIndicator, FlatList, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, Gavel, Compass, SlidersHorizontal, Check } from 'lucide-react-native';
 import * as LucideIcons from 'lucide-react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { getCategories } from '@/services/categoryService';
 import { getAuctions, FetchAuctionsParams } from '@/services/auctionService';
@@ -12,7 +12,16 @@ import { AuctionCard } from '@/components/ui/AuctionCard';
 import { finalizeExpiredAuctions } from '@/services/auctionFinalizationService';
 
 export default function ExploreScreen() {
-  const params = useLocalSearchParams<{ category?: string; query?: string }>();
+  const params = useLocalSearchParams<{
+    category?: string;
+    query?: string;
+    status?: string;
+    type?: string;
+    sort?: string;
+    minPrice?: string;
+    maxPrice?: string;
+  }>();
+  const router = useRouter();
 
   // Search, Filters & Sorting state
   const [searchQuery, setSearchQuery] = useState('');
@@ -20,7 +29,13 @@ export default function ExploreScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  // Sync category and search routing parameters
+  // Price range state
+  const [minPrice, setMinPrice] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
+  const [debouncedMinPrice, setDebouncedMinPrice] = useState('');
+  const [debouncedMaxPrice, setDebouncedMaxPrice] = useState('');
+
+  // Sync category, search, and other routing parameters
   useEffect(() => {
     if (params.category !== undefined) {
       setSelectedCategory(params.category || null);
@@ -29,10 +44,27 @@ export default function ExploreScreen() {
       setSearchQuery(params.query || '');
       setDebouncedSearch(params.query || '');
     }
-  }, [params.category, params.query]);
+    if (params.status !== undefined) {
+      setSelectedStatus(params.status as any || 'all');
+    }
+    if (params.type !== undefined) {
+      setAuctionTypeFilter(params.type as any || 'all');
+    }
+    if (params.sort !== undefined) {
+      setSortBy(params.sort as any || 'newest');
+    }
+    if (params.minPrice !== undefined) {
+      setMinPrice(params.minPrice || '');
+      setDebouncedMinPrice(params.minPrice || '');
+    }
+    if (params.maxPrice !== undefined) {
+      setMaxPrice(params.maxPrice || '');
+      setDebouncedMaxPrice(params.maxPrice || '');
+    }
+  }, [params.category, params.query, params.status, params.type, params.sort, params.minPrice, params.maxPrice]);
   
   // Advanced filters state
-  const [selectedStatus, setSelectedStatus] = useState<'all' | 'live' | 'scheduled'>('all');
+  const [selectedStatus, setSelectedStatus] = useState<'all' | 'live' | 'scheduled' | 'ending_soon'>('all');
   const [auctionTypeFilter, setAuctionTypeFilter] = useState<'all' | 'forward' | 'reverse'>('all');
   const [sortBy, setSortBy] = useState<FetchAuctionsParams['sortBy']>('newest');
   const [showFiltersModal, setShowFiltersModal] = useState(false);
@@ -55,6 +87,33 @@ export default function ExploreScreen() {
       clearTimeout(handler);
     };
   }, [searchQuery]);
+
+  // Debounce price inputs
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedMinPrice(minPrice);
+      setDebouncedMaxPrice(maxPrice);
+    }, 400);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [minPrice, maxPrice]);
+
+  // Sync state to Web URL parameters
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      router.setParams({
+        category: selectedCategory || '',
+        query: debouncedSearch || '',
+        status: selectedStatus || 'all',
+        type: auctionTypeFilter || 'all',
+        sort: sortBy || 'newest',
+        minPrice: debouncedMinPrice || '',
+        maxPrice: debouncedMaxPrice || '',
+      });
+    }
+  }, [selectedCategory, debouncedSearch, selectedStatus, auctionTypeFilter, sortBy, debouncedMinPrice, debouncedMaxPrice, router]);
 
   // Load Categories on mount & sweep expired auctions
   useEffect(() => {
@@ -85,14 +144,19 @@ export default function ExploreScreen() {
           ? categories.find((c) => c.slug === selectedCategory)?.id
           : null;
 
+        const minPriceNum = debouncedMinPrice ? parseFloat(debouncedMinPrice) : null;
+        const maxPriceNum = debouncedMaxPrice ? parseFloat(debouncedMaxPrice) : null;
+
         const results = await getAuctions({
           categoryId,
-          status: selectedStatus === 'all' ? null : selectedStatus,
+          status: selectedStatus === 'all' ? null : (selectedStatus === 'ending_soon' ? 'live' : selectedStatus),
           searchQuery: debouncedSearch,
-          sortBy,
+          sortBy: selectedStatus === 'ending_soon' ? 'ending_soon' : sortBy,
           page: pageNum,
           limit: 20,
           auctionType: auctionTypeFilter === 'all' ? null : auctionTypeFilter,
+          minPrice: minPriceNum,
+          maxPrice: maxPriceNum,
         });
 
         if (clearExisting) {
@@ -108,14 +172,14 @@ export default function ExploreScreen() {
         setLoadingMore(false);
       }
     },
-    [selectedCategory, selectedStatus, auctionTypeFilter, debouncedSearch, sortBy, categories]
+    [selectedCategory, selectedStatus, auctionTypeFilter, debouncedSearch, sortBy, debouncedMinPrice, debouncedMaxPrice, categories]
   );
 
   // Reload listings on filter/search change
   useEffect(() => {
     setPage(1);
     loadListings(1, true);
-  }, [selectedCategory, selectedStatus, auctionTypeFilter, debouncedSearch, sortBy, loadListings]);
+  }, [selectedCategory, selectedStatus, auctionTypeFilter, debouncedSearch, sortBy, debouncedMinPrice, debouncedMaxPrice, loadListings]);
 
   // Fetch next page on scroll
   const handleLoadMore = () => {
@@ -131,6 +195,37 @@ export default function ExploreScreen() {
     await loadListings(1, true);
     setRefreshing(false);
   };
+
+  const handleClearAll = () => {
+    setSearchQuery('');
+    setSelectedCategory(null);
+    setSelectedStatus('all');
+    setAuctionTypeFilter('all');
+    setSortBy('newest');
+    setMinPrice('');
+    setMaxPrice('');
+
+    if (Platform.OS === 'web') {
+      router.setParams({
+        category: '',
+        query: '',
+        status: 'all',
+        type: 'all',
+        sort: 'newest',
+        minPrice: '',
+        maxPrice: '',
+      });
+    }
+  };
+
+  const isAnyFilterActive =
+    selectedCategory !== null ||
+    selectedStatus !== 'all' ||
+    auctionTypeFilter !== 'all' ||
+    sortBy !== 'newest' ||
+    minPrice !== '' ||
+    maxPrice !== '' ||
+    searchQuery !== '';
 
   // Dynamic icon helper for categories
   const renderCategoryIcon = (iconName: string | null, color: string) => {
@@ -250,7 +345,7 @@ export default function ExploreScreen() {
             {/* Auction Type Filter Row */}
             <View className="px-5 mb-3 flex-row gap-2">
               {([
-                { label: 'All', value: 'all' },
+                { label: 'All Requests', value: 'all' },
                 { label: '🔨 Sell Auctions', value: 'forward' },
                 { label: '🔄 Buy Requests', value: 'reverse' },
               ] as const).map((item) => {
@@ -279,18 +374,19 @@ export default function ExploreScreen() {
                   <Text className="text-xs font-display font-bold text-brand-text mb-2">
                     Filter by Status
                   </Text>
-                  <View className="flex-row gap-2">
+                  <View className="flex-row flex-wrap gap-2">
                     {([
-                      { label: 'All', value: 'all' },
+                      { label: 'All Statuses', value: 'all' },
                       { label: 'Live Now', value: 'live' },
                       { label: 'Upcoming', value: 'scheduled' },
+                      { label: 'Ending Soon', value: 'ending_soon' },
                     ] as const).map((item) => {
                       const isActive = selectedStatus === item.value;
                       return (
                         <Pressable
                           key={item.value}
                           onPress={() => setSelectedStatus(item.value)}
-                          className={`flex-1 py-2 rounded-xl border items-center ${
+                          className={`px-3 py-2.5 rounded-xl border items-center ${
                             isActive ? 'bg-brand-text border-brand-text' : 'bg-stone-50 border-stone-200'
                           }`}
                         >
@@ -310,6 +406,7 @@ export default function ExploreScreen() {
                   </Text>
                   <View className="flex-row flex-wrap gap-2">
                     {([
+                      { label: 'Recommended', value: 'recommended' },
                       { label: 'Newest Listings', value: 'newest' },
                       { label: 'Ending Soonest', value: 'ending_soon' },
                       { label: 'Starting Soonest', value: 'starting_soon' },
@@ -334,8 +431,46 @@ export default function ExploreScreen() {
                     })}
                   </View>
                 </View>
+
+                {/* 3. Price range input */}
+                <View>
+                  <Text className="text-xs font-display font-bold text-brand-text mb-2">
+                    Price Range (₹)
+                  </Text>
+                  <View className="flex-row gap-3 items-center">
+                    <TextInput
+                      placeholder="Min Price"
+                      value={minPrice}
+                      onChangeText={setMinPrice}
+                      keyboardType="numeric"
+                      className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-3.5 h-11 text-xs font-display text-brand-text"
+                    />
+                    <Text className="text-xs font-display text-brand-muted">to</Text>
+                    <TextInput
+                      placeholder="Max Price"
+                      value={maxPrice}
+                      onChangeText={setMaxPrice}
+                      keyboardType="numeric"
+                      className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-3.5 h-11 text-xs font-display text-brand-text"
+                    />
+                  </View>
+                </View>
               </View>
             )}
+
+            {/* Results count & Clear actions */}
+            <View className="px-5 mb-3 flex-row justify-between items-center">
+              <Text className="text-xs font-display font-semibold text-brand-muted">
+                Showing {listings.length} {listings.length === 1 ? 'auction' : 'auctions'}
+              </Text>
+              {isAnyFilterActive && (
+                <Pressable onPress={handleClearAll} className="active:opacity-85">
+                  <Text className="text-xs font-display font-bold text-brand-primary">
+                    Clear All
+                  </Text>
+                </Pressable>
+              )}
+            </View>
           </View>
         }
         ListEmptyComponent={
