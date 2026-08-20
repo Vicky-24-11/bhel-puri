@@ -16,6 +16,8 @@ import {
   updatePaymentSystemConfig,
   getSellerOnboardingProfiles,
   updateSellerOnboardingStatus,
+  getFinancialReconciliationIssues,
+  updateReconciliationIssueStatus,
 } from '@/services/adminService';
 
 export default function FinancialDashboardScreen() {
@@ -29,6 +31,11 @@ export default function FinancialDashboardScreen() {
   const [sellerOnboardingList, setSellerOnboardingList] = useState<any[]>([]);
   const [productionPaymentsEnabled, setProductionPaymentsEnabled] = useState(false);
   const [paymentEnvironment, setPaymentEnvironment] = useState<'sandbox' | 'production'>('sandbox');
+  const [reconciliationIssues, setReconciliationIssues] = useState<any[]>([]);
+  const [selectedResolutionFilter, setSelectedResolutionFilter] = useState<'open' | 'under_review' | 'resolved' | 'ignored'>('open');
+  const [paymentsBlocked, setPaymentsBlocked] = useState(false);
+  const [payoutsBlocked, setPayoutsBlocked] = useState(false);
+  const [refundsBlocked, setRefundsBlocked] = useState(false);
   
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -79,28 +86,41 @@ export default function FinancialDashboardScreen() {
     }
   };
 
-  const handleUpdateSystemConfig = async (newEnv: 'sandbox' | 'production', newProdEnabled: boolean) => {
+  const handleUpdateSystemConfig = async (
+    newEnv: 'sandbox' | 'production',
+    newProdEnabled: boolean,
+    blockPayments?: boolean,
+    blockPayouts?: boolean,
+    blockRefunds?: boolean
+  ) => {
     try {
+      const targetPaymentsBlocked = blockPayments !== undefined ? blockPayments : paymentsBlocked;
+      const targetPayoutsBlocked = blockPayouts !== undefined ? blockPayouts : payoutsBlocked;
+      const targetRefundsBlocked = blockRefunds !== undefined ? blockRefunds : refundsBlocked;
+
+      const triggerAction = async () => {
+        setLoading(true);
+        await updatePaymentSystemConfig(
+          newProdEnabled,
+          newEnv,
+          targetPaymentsBlocked,
+          targetPayoutsBlocked,
+          targetRefundsBlocked
+        );
+        await loadData();
+      };
+
       if (newEnv === 'production' && newProdEnabled) {
         Alert.alert(
           'Enable Production Payments?',
           'WARNING: Real customer payments and payouts will be enabled. Are you sure you want to enable production payments?',
           [
             { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Enable Production',
-              onPress: async () => {
-                setLoading(true);
-                await updatePaymentSystemConfig(newProdEnabled, newEnv);
-                await loadData();
-              }
-            }
+            { text: 'Enable Production', onPress: triggerAction }
           ]
         );
       } else {
-        setLoading(true);
-        await updatePaymentSystemConfig(newProdEnabled, newEnv);
-        await loadData();
+        triggerAction();
       }
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to update system config.');
@@ -126,6 +146,30 @@ export default function FinancialDashboardScreen() {
     }
   };
 
+  const handleUpdateIssueStatus = async (issueId: string, status: 'open' | 'under_review' | 'resolved' | 'ignored') => {
+    try {
+      Alert.alert(
+        'Update Resolution Status',
+        `Are you sure you want to change issue status to ${status}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Confirm',
+            onPress: async () => {
+              setLoading(true);
+              await updateReconciliationIssueStatus(issueId, status, 'Super Admin Manual Override');
+              await loadData();
+            }
+          }
+        ]
+      );
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to update status.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Form states
   const [newCommissionRate, setNewCommissionRate] = useState('');
   const [newProtectionDays, setNewProtectionDays] = useState('');
@@ -146,6 +190,7 @@ export default function FinancialDashboardScreen() {
         pmts,
         sysConf,
         sellers,
+        issues,
       ] = await Promise.all([
         getFinancialStats(),
         getPlatformFeeConfig(),
@@ -155,6 +200,7 @@ export default function FinancialDashboardScreen() {
         getAdminPayments(),
         getPaymentSystemConfig(),
         getSellerOnboardingProfiles(),
+        getFinancialReconciliationIssues(),
       ]);
 
       setStats(statsData);
@@ -165,6 +211,7 @@ export default function FinancialDashboardScreen() {
       setPayments(pmts);
       setSystemConfig(sysConf);
       setSellerOnboardingList(sellers);
+      setReconciliationIssues(issues);
 
       if (feeConfig) setNewCommissionRate(feeConfig.commission_rate.toString());
       if (protectConfig) {
@@ -175,6 +222,9 @@ export default function FinancialDashboardScreen() {
       if (sysConf) {
         setProductionPaymentsEnabled(sysConf.production_payments_enabled);
         setPaymentEnvironment(sysConf.payment_environment);
+        setPaymentsBlocked(sysConf.payments_blocked_globally || false);
+        setPayoutsBlocked(sysConf.payouts_blocked_globally || false);
+        setRefundsBlocked(sysConf.refunds_blocked_globally || false);
       }
     } catch (err) {
       console.error('Error loading financial admin data:', err);
@@ -287,6 +337,45 @@ export default function FinancialDashboardScreen() {
               value={productionPaymentsEnabled}
               onValueChange={(val) => handleUpdateSystemConfig(paymentEnvironment, val)}
             />
+          </View>
+        </View>
+
+        {/* Emergency Financial Halts Switches */}
+        <View className="border-t border-stone-100 pt-4 mt-2">
+          <Text className="text-xs font-display font-bold text-brand-text uppercase mb-3">Emergency Financial Controls</Text>
+          <View className="flex-row flex-wrap gap-4">
+            <View className="flex-1 min-w-[180px] bg-stone-50 p-3.5 rounded-2xl flex-row items-center justify-between border border-stone-100">
+              <View className="gap-0.5">
+                <Text className="text-xs font-display font-bold text-brand-text">Payment Creation</Text>
+                <Text className="text-[9px] font-display text-brand-muted uppercase font-bold">{paymentsBlocked ? 'BLOCKED' : 'ENABLED'}</Text>
+              </View>
+              <Switch
+                value={paymentsBlocked}
+                onValueChange={(val) => handleUpdateSystemConfig(paymentEnvironment, productionPaymentsEnabled, val, payoutsBlocked, refundsBlocked)}
+              />
+            </View>
+
+            <View className="flex-1 min-w-[180px] bg-stone-50 p-3.5 rounded-2xl flex-row items-center justify-between border border-stone-100">
+              <View className="gap-0.5">
+                <Text className="text-xs font-display font-bold text-brand-text">Seller Payouts</Text>
+                <Text className="text-[9px] font-display text-brand-muted uppercase font-bold">{payoutsBlocked ? 'BLOCKED' : 'ENABLED'}</Text>
+              </View>
+              <Switch
+                value={payoutsBlocked}
+                onValueChange={(val) => handleUpdateSystemConfig(paymentEnvironment, productionPaymentsEnabled, paymentsBlocked, val, refundsBlocked)}
+              />
+            </View>
+
+            <View className="flex-1 min-w-[180px] bg-stone-50 p-3.5 rounded-2xl flex-row items-center justify-between border border-stone-100">
+              <View className="gap-0.5">
+                <Text className="text-xs font-display font-bold text-brand-text">Refund Execution</Text>
+                <Text className="text-[9px] font-display text-brand-muted uppercase font-bold">{refundsBlocked ? 'BLOCKED' : 'ENABLED'}</Text>
+              </View>
+              <Switch
+                value={refundsBlocked}
+                onValueChange={(val) => handleUpdateSystemConfig(paymentEnvironment, productionPaymentsEnabled, paymentsBlocked, payoutsBlocked, val)}
+              />
+            </View>
           </View>
         </View>
       </View>
@@ -558,6 +647,97 @@ export default function FinancialDashboardScreen() {
                 </View>
               </View>
             ))}
+          </View>
+        </ScrollView>
+      </View>
+
+
+      {/* Financial Reconciliation Discrepancies */}
+      <View className="bg-white border border-stone-200 rounded-3xl shadow-sm p-6 mb-8 gap-4">
+        <View className="flex-row justify-between items-center mb-2">
+          <View className="flex-row items-center gap-2">
+            <Shield size={18} color="#FF6B35" />
+            <Text className="text-base font-display font-bold text-brand-text">Financial Reconciliation Discrepancies</Text>
+          </View>
+
+          {/* Filtering buttons */}
+          <View className="flex-row gap-1 bg-stone-100 p-1 rounded-xl">
+            {(['open', 'under_review', 'resolved', 'ignored'] as const).map((filter) => (
+              <Pressable
+                key={filter}
+                onPress={() => setSelectedResolutionFilter(filter)}
+                className={`px-2.5 py-1 rounded-lg ${selectedResolutionFilter === filter ? 'bg-white shadow-sm' : 'active:opacity-80'}`}
+              >
+                <Text className={`text-[10px] font-display font-bold uppercase ${selectedResolutionFilter === filter ? 'text-brand-primary' : 'text-stone-500'}`}>
+                  {filter.replace('_', ' ')}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        <ScrollView horizontal className="border border-stone-100 rounded-2xl bg-stone-50">
+          <View className="min-w-[950px] p-4 gap-2">
+            <View className="flex-row border-b border-stone-200 pb-2">
+              <Text className="w-24 text-[10px] font-display font-bold text-stone-400 uppercase">Issue Type</Text>
+              <Text className="flex-1 text-[10px] font-display font-bold text-stone-400 uppercase">Payment ID</Text>
+              <Text className="w-24 text-[10px] font-display font-bold text-stone-400 text-right uppercase">Internal Amount</Text>
+              <Text className="w-24 text-[10px] font-display font-bold text-stone-400 text-right uppercase">Provider Amount</Text>
+              <Text className="w-24 text-[10px] font-display font-bold text-stone-400 text-center uppercase">Internal Status</Text>
+              <Text className="w-24 text-[10px] font-display font-bold text-stone-400 text-center uppercase">Provider Status</Text>
+              <Text className="w-48 text-[10px] font-display font-bold text-stone-400 text-center uppercase">Actions</Text>
+            </View>
+
+            {reconciliationIssues
+              .filter((issue) => issue.resolution_status === selectedResolutionFilter)
+              .map((issue: any, idx: number) => (
+                <View key={idx} className="flex-row py-2.5 border-b border-stone-100 items-center">
+                  <Text className="w-24 text-[11px] font-display text-brand-text font-bold uppercase">
+                    {issue.issue_type.replace('_', ' ')}
+                  </Text>
+                  <Text className="flex-1 text-[11px] font-display text-stone-600">
+                    {issue.payment_id || 'N/A'}
+                  </Text>
+                  <Text className="w-24 text-[11px] font-display text-stone-800 font-extrabold text-right">
+                    ₹{issue.internal_amount?.toLocaleString('en-IN') || '0.00'}
+                  </Text>
+                  <Text className="w-24 text-[11px] font-display text-stone-800 font-extrabold text-right">
+                    ₹{issue.provider_amount?.toLocaleString('en-IN') || '0.00'}
+                  </Text>
+                  <Text className="w-24 text-[11px] font-display text-stone-600 text-center uppercase">
+                    {issue.internal_status || 'N/A'}
+                  </Text>
+                  <Text className="w-24 text-[11px] font-display text-stone-600 text-center uppercase">
+                    {issue.provider_status || 'N/A'}
+                  </Text>
+                  <View className="w-48 flex-row gap-1 justify-center">
+                    {issue.resolution_status === 'open' && (
+                      <Pressable
+                        onPress={() => handleUpdateIssueStatus(issue.id, 'under_review')}
+                        className="px-2 py-1 bg-amber-600 rounded-lg active:opacity-90"
+                      >
+                        <Text className="text-white text-[9px] font-display font-bold">Investigate</Text>
+                      </Pressable>
+                    )}
+                    {(issue.resolution_status === 'open' || issue.resolution_status === 'under_review') && (
+                      <>
+                        <Pressable
+                          onPress={() => handleUpdateIssueStatus(issue.id, 'resolved')}
+                          className="px-2 py-1 bg-emerald-600 rounded-lg active:opacity-90"
+                        >
+                          <Text className="text-white text-[9px] font-display font-bold">Resolve</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => handleUpdateIssueStatus(issue.id, 'ignored')}
+                          className="px-2 py-1 bg-stone-600 rounded-lg active:opacity-90"
+                        >
+                          <Text className="text-white text-[9px] font-display font-bold">Ignore</Text>
+                        </Pressable>
+                      </>
+                    )}
+                  </View>
+                </View>
+              ))}
           </View>
         </ScrollView>
       </View>

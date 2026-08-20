@@ -880,7 +880,13 @@ export async function getPaymentSystemConfig() {
 /**
  * Updates system payments configuration (Super Admin only)
  */
-export async function updatePaymentSystemConfig(productionPaymentsEnabled: boolean, paymentEnvironment: 'sandbox' | 'production') {
+export async function updatePaymentSystemConfig(
+  productionPaymentsEnabled: boolean,
+  paymentEnvironment: 'sandbox' | 'production',
+  paymentsBlockedGlobally: boolean = false,
+  payoutsBlockedGlobally: boolean = false,
+  refundsBlockedGlobally: boolean = false
+) {
   const { data: user } = await supabase.auth.getUser();
   if (!user || !user.user) throw new Error('Unauthenticated');
 
@@ -896,6 +902,9 @@ export async function updatePaymentSystemConfig(productionPaymentsEnabled: boole
     .insert({
       production_payments_enabled: productionPaymentsEnabled,
       payment_environment: paymentEnvironment,
+      payments_blocked_globally: paymentsBlockedGlobally,
+      payouts_blocked_globally: payoutsBlockedGlobally,
+      refunds_blocked_globally: refundsBlockedGlobally,
       is_active: true,
       updated_by: user.user.id
     })
@@ -965,6 +974,63 @@ export async function updateSellerOnboardingStatus(
     entity_id: accountId,
     new_value: data,
     reason: `Onboarding status manually updated to ${onboardingStatus}`
+  });
+
+  return data;
+}
+
+/**
+ * Fetches all financial reconciliation issues (Super Admin only)
+ */
+export async function getFinancialReconciliationIssues() {
+  const { data, error } = await supabase
+    .from('financial_reconciliation_issues')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching reconciliation issues:', error);
+    return [];
+  }
+  return data || [];
+}
+
+/**
+ * Updates a financial reconciliation issue's status (Super Admin only)
+ */
+export async function updateReconciliationIssueStatus(
+  issueId: string,
+  newStatus: 'open' | 'under_review' | 'resolved' | 'ignored',
+  note?: string
+) {
+  const { data: user } = await supabase.auth.getUser();
+  if (!user || !user.user) throw new Error('Unauthenticated');
+
+  const { data, error } = await supabase
+    .from('financial_reconciliation_issues')
+    .update({
+      resolution_status: newStatus,
+      resolved_by: user.user.id,
+      resolved_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', issueId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating reconciliation issue status:', error);
+    throw error;
+  }
+
+  // Log in financial audit logs
+  await supabase.from('financial_audit_logs').insert({
+    actor_id: user.user.id,
+    action: 'reconciliation_issue_resolved',
+    entity_type: 'reconciliation',
+    entity_id: issueId,
+    new_value: { status: newStatus, note },
+    reason: `Reconciliation issue status manually changed to ${newStatus}`
   });
 
   return data;

@@ -50,6 +50,21 @@ serve(async (req) => {
 
     const env = sysConfig?.payment_environment || "sandbox";
     const prodEnabled = sysConfig?.production_payments_enabled || false;
+    const refundsBlocked = sysConfig?.refunds_blocked_globally || false;
+
+    if (refundsBlocked) {
+      await supabaseClient.from("financial_audit_logs").insert({
+        actor_id: user.id,
+        action: "refund_creation_blocked",
+        entity_type: "refund",
+        reason: "Refund execution blocked globally by emergency toggle."
+      });
+
+      return new Response(JSON.stringify({ error: "Refunds are temporarily suspended." }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (env === "production" && !prodEnabled) {
       return new Response(JSON.stringify({ error: "Production refunds are currently unavailable." }), {
@@ -169,14 +184,19 @@ serve(async (req) => {
 
     if (rfError) throw rfError;
 
-    // Update payment status to refunded
-    await supabaseClient
-      .from("payments")
-      .update({
-        status: "refunded",
-        refunded_at: new Date().toISOString()
-      })
-      .eq("id", paymentId);
+    // Update payment status to refunded ONLY if fully returned
+    const finalRefundTotal = totalRefunded + Number(amount);
+    const isFullRefund = finalRefundTotal >= Number(payment.amount);
+
+    if (isFullRefund) {
+      await supabaseClient
+        .from("payments")
+        .update({
+          status: "refunded",
+          refunded_at: new Date().toISOString()
+        })
+        .eq("id", paymentId);
+    }
 
     // Log financial audit event
     await supabaseClient
