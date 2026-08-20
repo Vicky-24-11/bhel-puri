@@ -25,11 +25,13 @@ import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/lib/AuthContext";
 import { signOut } from "@/services/authService";
 import { supabase } from "@/lib/supabase";
+import { getRatingsForUser } from "@/services/ratingService";
 
 export default function ProfileScreen() {
   const { user, profile } = useAuth();
   const [createdCount, setCreatedCount] = useState<number>(0);
   const [wonCount, setWonCount] = useState<number>(0);
+  const [reviewsList, setReviewsList] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -51,6 +53,13 @@ export default function ProfileScreen() {
       .then(({ count }) => {
         if (count !== null) setWonCount(count);
       });
+
+    // Fetch Recent Reviews Received
+    if (user.id) {
+      getRatingsForUser(user.id, undefined, 5, 0)
+        .then((data) => setReviewsList(data))
+        .catch((err) => console.error('Error fetching profile reviews:', err));
+    }
   }, [user]);
 
   const handleLogout = () => {
@@ -290,6 +299,43 @@ export default function ProfileScreen() {
             onPress={handleLogout}
             className="border-brand-error/20 active:bg-red-50"
           />
+
+          {/* Recent Reviews Received */}
+          {reviewsList.length > 0 && (
+            <View className="bg-white border border-stone-200 rounded-3xl p-5 shadow-sm mt-6 gap-4">
+              <View className="flex-row items-center gap-2">
+                <Star size={16} color="#FF6B35" fill="#FF6B35" />
+                <Text className="text-sm font-display font-bold text-brand-text">
+                  Recent Reviews Received
+                </Text>
+              </View>
+              <View className="gap-3">
+                {reviewsList.map((item) => (
+                  <View key={item.id} className="border-b border-stone-100 pb-3 last:border-b-0">
+                    <View className="flex-row justify-between items-center mb-1">
+                      <Text className="text-xs font-display font-bold text-brand-text">
+                        @{item.reviewer?.username || 'user'}
+                      </Text>
+                      <View className="flex-row items-center">
+                        <Star size={10} color="#F59E0B" fill="#F59E0B" className="mr-0.5" />
+                        <Text className="text-[10px] font-display font-extrabold text-brand-text">
+                          {item.rating_value}.0
+                        </Text>
+                      </View>
+                    </View>
+                    {item.comment && (
+                      <Text className="text-xs font-display text-brand-muted leading-relaxed">
+                        {item.comment}
+                      </Text>
+                    )}
+                    <Text className="text-[8px] font-display text-brand-muted mt-1">
+                      {new Date(item.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
