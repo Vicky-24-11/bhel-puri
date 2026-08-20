@@ -50,9 +50,23 @@ serve(async (req) => {
 
     const env = sysConfig?.payment_environment || "sandbox";
     const prodEnabled = sysConfig?.production_payments_enabled || false;
+    const paymentsBlocked = sysConfig?.payments_blocked_globally || false;
+
+    if (paymentsBlocked) {
+      await supabaseClient.from("financial_audit_logs").insert({
+        actor_id: user.id,
+        action: "payment_creation_blocked",
+        entity_type: "payment",
+        reason: "Payment creation blocked globally by emergency toggle."
+      });
+
+      return new Response(JSON.stringify({ error: "Payments are temporarily suspended." }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (env === "production" && !prodEnabled) {
-      // Log blocked attempt
       await supabaseClient.from("financial_audit_logs").insert({
         actor_id: user.id,
         action: "production_payment_blocked",
@@ -80,7 +94,7 @@ serve(async (req) => {
       });
     }
 
-    // 3. Security validation: Buyer check
+    // 3. Security validation
     if (transaction.buyer_id !== user.id) {
       return new Response(JSON.stringify({ error: "Access Denied: Only the transaction buyer can pay." }), {
         status: 403,
@@ -96,22 +110,69 @@ serve(async (req) => {
       });
     }
 
-    // 5. Duplicate capture prevention
+    // 5. Check if payment already exists
     const { data: existingPayment } = await supabaseClient
       .from("payments")
       .select("*")
       .eq("transaction_id", transactionId)
-      .in("status", ["captured", "held", "released"])
       .maybeSingle();
 
-    if (existingPayment) {
+    if (existingPayment && ["captured", "held", "released"].includes(existingPayment.status)) {
       return new Response(JSON.stringify({ error: "Payment already successfully captured for this transaction" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // 6. Create/Upsert the payments record idempotently (snapshot logic runs on trigger)
+    // Configure keys
+    let appId, secretKey, cfUrl, cfGetUrl;
+    if (env === "production") {
+      appId = Deno.env.get("CASHFREE_PROD_APP_ID") || "";
+      secretKey = Deno.env.get("CASHFREE_PROD_SECRET_KEY") || "";
+      cfUrl = "https://api.cashfree.com/pg/orders";
+    } else {
+      appId = Deno.env.get("CASHFREE_SANDBOX_APP_ID") || "TEST1027170134b2203ddb72c9bc44d110717201";
+      secretKey = Deno.env.get("CASHFREE_SANDBOX_SECRET_KEY") || "cfsk_ma_test_04c55ec3e7fead17a7e17424b9148560_050d2bc4";
+      cfUrl = "https://sandbox.cashfree.com/pg/orders";
+    }
+
+    if (!appId || !secretKey) {
+      throw new Error(`Missing App ID or Secret Key configuration for environment: ${env}`);
+    }
+
+    // 6. Reuse existing checkout session if active
+    if (existingPayment && existingPayment.razorpay_order_id) {
+      cfGetUrl = `${cfUrl}/${existingPayment.id}`;
+      try {
+        const getResponse = await fetch(cfGetUrl, {
+          method: "GET",
+          headers: {
+            "x-api-version": "2023-08-01",
+            "x-client-id": appId,
+            "x-client-secret": secretKey,
+            "content-type": "application/json",
+          }
+        });
+        if (getResponse.ok) {
+          const getData = await getResponse.json();
+          return new Response(JSON.stringify({
+            paymentId: existingPayment.id,
+            cfOrderId: existingPayment.razorpay_order_id,
+            paymentLink: getData.payment_session_id,
+            amount: existingPayment.amount,
+            currency: "INR",
+            status: existingPayment.status,
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } catch (getErr) {
+        console.warn("GET order details failed, creating a new checkout flow:", getErr);
+      }
+    }
+
+    // 7. Insert or update payments record
     const { data: payment, error: pmError } = await supabaseClient
       .from("payments")
       .upsert({
@@ -125,25 +186,10 @@ serve(async (req) => {
       .single();
 
     if (pmError || !payment) {
-      throw pmError || new Error("Failed to insert payments record.");
+      throw pmError || new Error("Failed to register payments record.");
     }
 
-    // 7. Configure Cashfree keys and URLs
-    let appId, secretKey, cfUrl;
-    if (env === "production") {
-      appId = Deno.env.get("CASHFREE_PROD_APP_ID") || "";
-      secretKey = Deno.env.get("CASHFREE_PROD_SECRET_KEY") || "";
-      cfUrl = "https://api.cashfree.com/pg/orders";
-    } else {
-      appId = Deno.env.get("CASHFREE_SANDBOX_APP_ID") || "TEST1027170134b2203ddb72c9bc44d110717201";
-      secretKey = Deno.env.get("CASHFREE_SANDBOX_SECRET_KEY") || "cfsk_ma_test_04c55ec3e7fead17a7e17424b9148560_050d2bc4";
-      cfUrl = "https://sandbox.cashfree.com/pg/orders";
-    }
-
-    if (!appId || !secretKey) {
-      throw new Error(`Missing provider App ID or Secret Key configuration for environment: ${env}`);
-    }
-    
+    // 8. Create Cashfree checkout order
     const cfResponse = await fetch(cfUrl, {
       method: "POST",
       headers: {
@@ -169,15 +215,15 @@ serve(async (req) => {
 
     const cfData = await cfResponse.json();
     if (!cfResponse.ok) {
-      console.error("Cashfree API order creation failure:", cfData);
+      console.error("Cashfree order creation failure:", cfData);
       return new Response(JSON.stringify({ error: cfData.message || "Provider API creation failed" }), {
         status: cfResponse.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // 8. Update payments registry with Provider details
-    const { error: updateError } = await supabaseClient
+    // 9. Update payments with order ID
+    await supabaseClient
       .from("payments")
       .update({
         razorpay_order_id: cfData.cf_order_id,
@@ -185,7 +231,14 @@ serve(async (req) => {
       })
       .eq("id", payment.id);
 
-    if (updateError) throw updateError;
+    // Audit log insertion
+    await supabaseClient.from("financial_audit_logs").insert({
+      actor_id: user.id,
+      action: "payment_initiated",
+      entity_type: "payment",
+      entity_id: payment.id,
+      new_value: { cfOrderId: cfData.cf_order_id, amount: payment.amount }
+    });
 
     return new Response(JSON.stringify({
       paymentId: payment.id,

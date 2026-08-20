@@ -50,6 +50,22 @@ serve(async (req) => {
 
     const env = sysConfig?.payment_environment || "sandbox";
     const prodEnabled = sysConfig?.production_payments_enabled || false;
+    const payoutsBlocked = sysConfig?.payouts_blocked_globally || false;
+
+    if (payoutsBlocked) {
+      await supabaseClient.from("financial_audit_logs").insert({
+        actor_id: user.id,
+        action: "payout_blocked_emergency",
+        entity_type: "payment",
+        entity_id: paymentId,
+        reason: "Payout blocked globally by emergency toggle."
+      });
+
+      return new Response(JSON.stringify({ error: "Seller payouts are temporarily suspended." }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (env === "production" && !prodEnabled) {
       return new Response(JSON.stringify({ error: "Production payouts are currently unavailable." }), {
@@ -83,7 +99,6 @@ serve(async (req) => {
     }
 
     const isBuyer = payment.transaction?.buyer_id === user.id;
-
     if (!isSuperAdmin && !isBuyer) {
       return new Response(JSON.stringify({ error: "Access Denied: Unauthorized to confirm receipt." }), {
         status: 403,
@@ -120,25 +135,31 @@ serve(async (req) => {
       .eq("user_id", payment.transaction.seller_id)
       .maybeSingle();
 
-    if (env === "production") {
-      if (!sellerAccount || sellerAccount.kyc_status !== "verified" || !sellerAccount.payout_enabled) {
-        return new Response(JSON.stringify({ error: "Blocked: Seller payouts are disabled due to incomplete verification/KYC status." }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    if (!sellerAccount || !sellerAccount.payout_enabled) {
+      return new Response(JSON.stringify({ error: "Blocked: Seller payouts are disabled due to incomplete verification/KYC status." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // 6. Update status and release in database (simulated sandbox release)
-    const { error: updateError } = await supabaseClient
+    // 6. Update status conditionally (prevents concurrent race conditions)
+    const { data: updatedPayment, error: updateError } = await supabaseClient
       .from("payments")
       .update({
         status: "released",
         released_at: new Date().toISOString()
       })
-      .eq("id", paymentId);
+      .eq("id", paymentId)
+      .in("status", ["held", "captured"])
+      .select()
+      .maybeSingle();
 
-    if (updateError) throw updateError;
+    if (updateError || !updatedPayment) {
+      return new Response(JSON.stringify({ error: "Payout release failed: payment already processed or released." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Create a payout transfer record
     await supabaseClient

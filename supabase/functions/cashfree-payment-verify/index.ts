@@ -72,6 +72,20 @@ serve(async (req) => {
       });
     }
 
+    // Short-circuit if already processed successfully (idempotent verification)
+    if (["captured", "held", "released"].includes(payment.status)) {
+      return new Response(JSON.stringify({
+        paymentId: payment.id,
+        cfPaymentId: payment.razorpay_payment_id || `cf_pay_${Date.now()}`,
+        status: payment.status,
+        amount: payment.amount,
+        paidAt: payment.paid_at,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // 3. Configure Cashfree keys and URLs
     let appId, secretKey, cfUrl;
     if (env === "production") {
@@ -127,6 +141,15 @@ serve(async (req) => {
           .eq("id", payment.id);
 
         if (updateError) throw updateError;
+
+        // Log financial event
+        await supabaseClient.from("financial_audit_logs").insert({
+          actor_id: user.id,
+          action: "payment_captured",
+          entity_type: "payment",
+          entity_id: payment.id,
+          new_value: { status: nextStatus, paidAt }
+        });
       }
     } else if (cfData.order_status === "EXPIRED" || cfData.order_status === "TERMINATED") {
       if (payment.status === "created") {
