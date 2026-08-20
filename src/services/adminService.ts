@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { activePaymentProvider } from '@/services/payment';
 
 export interface AdminUser {
   id: string;
@@ -608,4 +609,363 @@ export async function moderateReview(
   }
 
   return true;
+}
+
+/**
+ * Fetches the active platform fee config
+ */
+export async function getPlatformFeeConfig() {
+  const { data, error } = await supabase
+    .from('platform_fee_config')
+    .select('*')
+    .eq('is_active', true)
+    .order('effective_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching platform fee config:', error);
+    return null;
+  }
+  return data;
+}
+
+/**
+ * Fetches platform fee config history
+ */
+export async function getPlatformFeeConfigHistory() {
+  const { data, error } = await supabase
+    .from('platform_fee_config')
+    .select('*, creator:profiles!created_by(username)')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching platform fee config history:', error);
+    return [];
+  }
+  return data || [];
+}
+
+/**
+ * Creates and activates a new platform fee config (deactivating current one)
+ */
+export async function createPlatformFeeConfig(commissionRate: number) {
+  // Deactivate existing active ones
+  await supabase
+    .from('platform_fee_config')
+    .update({ is_active: false })
+    .eq('is_active', true);
+
+  const { data, error } = await supabase
+    .from('platform_fee_config')
+    .insert({
+      commission_rate: commissionRate,
+      is_active: true,
+      created_by: (await supabase.auth.getUser()).data.user?.id
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating platform fee config:', error);
+    throw new Error(error.message || 'Failed to update commission rate.');
+  }
+  return data;
+}
+
+/**
+ * Fetches the active platform protection config
+ */
+export async function getPlatformProtectionConfig() {
+  const { data, error } = await supabase
+    .from('platform_protection_config')
+    .select('*')
+    .eq('is_active', true)
+    .order('effective_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching platform protection config:', error);
+    return null;
+  }
+  return data;
+}
+
+/**
+ * Updates/Inserts new platform protection config
+ */
+export async function updatePlatformProtectionConfig(
+  buyerProtectionPeriodDays: number,
+  payoutRequiresBuyerConfirmation: boolean,
+  payoutAutoAfterProtectionExpiry: boolean
+) {
+  // Deactivate existing active ones
+  await supabase
+    .from('platform_protection_config')
+    .update({ is_active: false })
+    .eq('is_active', true);
+
+  const { data, error } = await supabase
+    .from('platform_protection_config')
+    .insert({
+      buyer_protection_period_days: buyerProtectionPeriodDays,
+      payout_requires_buyer_confirmation: payoutRequiresBuyerConfirmation,
+      payout_auto_after_protection_expiry: payoutAutoAfterProtectionExpiry,
+      is_active: true,
+      created_by: (await supabase.auth.getUser()).data.user?.id
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating platform protection config:', error);
+    throw new Error(error.message || 'Failed to update protection configuration.');
+  }
+  return data;
+}
+
+/**
+ * Fetches financial audit logs
+ */
+export async function getFinancialAuditLogs() {
+  const { data, error } = await supabase
+    .from('financial_audit_logs')
+    .select('*, actor:profiles!actor_id(username)')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching financial audit logs:', error);
+    return [];
+  }
+  return data || [];
+}
+
+/**
+ * Fetches overview stats for payments dashboard
+ */
+export async function getFinancialStats() {
+  const { data: payments, error } = await supabase
+    .from('payments')
+    .select('*, transaction:transactions(buyer_id, seller_id)');
+
+  if (error || !payments) {
+    console.error('Error fetching financial overview stats:', error);
+    return null;
+  }
+
+  const stats = {
+    grossVolume: 0,
+    totalPaymentsCount: payments.length,
+    successfulPaymentsCount: 0,
+    pendingPaymentsCount: 0,
+    failedPaymentsCount: 0,
+    refundedAmount: 0,
+    commissionRevenue: 0,
+    providerCosts: 0,
+    sellerPayouts: 0,
+    pendingPayouts: 0,
+    disputedAmount: 0,
+  };
+
+  payments.forEach((p: any) => {
+    const amount = Number(p.amount) || 0;
+    const commission = Number(p.commission_amount) || 0;
+    const estCosts = Number(p.provider_costs_estimated) || 0;
+    const actCosts = Number(p.provider_costs_actual) || 0;
+    const payout = Number(p.seller_net_payout) || 0;
+
+    if (p.status === 'captured' || p.status === 'held' || p.status === 'released') {
+      stats.grossVolume += amount;
+      stats.successfulPaymentsCount++;
+      stats.commissionRevenue += commission;
+      stats.providerCosts += actCosts || estCosts;
+      
+      if (p.status === 'released') {
+        stats.sellerPayouts += payout;
+      } else {
+        stats.pendingPayouts += payout;
+      }
+    } else if (p.status === 'created' || p.status === 'processing') {
+      stats.pendingPaymentsCount++;
+    } else if (p.status === 'failed') {
+      stats.failedPaymentsCount++;
+    } else if (p.status === 'refunded') {
+      stats.refundedAmount += amount;
+    }
+  });
+
+  return stats;
+}
+
+/**
+ * Fetches admin payments list
+ */
+export async function getAdminPayments() {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('*, transaction:transactions(*, buyer:profiles!transactions_buyer_id_fkey(username), seller:profiles!transactions_seller_id_fkey(username))')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching admin payments list:', error);
+    return [];
+  }
+  return data || [];
+}
+
+/**
+ * Initiates a full or partial refund for a payment (Super Admin only)
+ */
+export async function adminRefundPayment(paymentId: string, amount: number, reason: string) {
+  const { data: user } = await supabase.auth.getUser();
+  if (!user || !user.user) throw new Error('Unauthenticated');
+
+  const result = await activePaymentProvider.requestRefund(paymentId, amount);
+
+  // Log to financial audit logs
+  await supabase.from('financial_audit_logs').insert({
+    actor_id: user.user.id,
+    action: 'refund_processed',
+    entity_type: 'refund',
+    entity_id: result.refundId,
+    new_value: result,
+    reason: reason || 'Admin initiated refund'
+  });
+
+  return result;
+}
+
+/**
+ * Releases held payout settlement to the seller's account (Super Admin only)
+ */
+export async function adminReleaseSettlement(paymentId: string) {
+  const { data: user } = await supabase.auth.getUser();
+  if (!user || !user.user) throw new Error('Unauthenticated');
+
+  const success = await activePaymentProvider.releaseSellerSettlement(paymentId);
+
+  if (success) {
+    // Log to financial audit logs
+    await supabase.from('financial_audit_logs').insert({
+      actor_id: user.user.id,
+      action: 'payout_released',
+      entity_type: 'transfer',
+      entity_id: paymentId,
+      new_value: { success: true },
+      reason: 'Admin released payout settlement'
+    });
+  }
+
+  return success;
+}
+
+/**
+ * Fetches the active system payments configuration
+ */
+export async function getPaymentSystemConfig() {
+  const { data, error } = await supabase
+    .from('payment_system_config')
+    .select('*')
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching payment system config:', error);
+    return null;
+  }
+  return data;
+}
+
+/**
+ * Updates system payments configuration (Super Admin only)
+ */
+export async function updatePaymentSystemConfig(productionPaymentsEnabled: boolean, paymentEnvironment: 'sandbox' | 'production') {
+  const { data: user } = await supabase.auth.getUser();
+  if (!user || !user.user) throw new Error('Unauthenticated');
+
+  // Deactivate old configs
+  await supabase
+    .from('payment_system_config')
+    .update({ is_active: false })
+    .eq('is_active', true);
+
+  // Insert new active config
+  const { data, error } = await supabase
+    .from('payment_system_config')
+    .insert({
+      production_payments_enabled: productionPaymentsEnabled,
+      payment_environment: paymentEnvironment,
+      is_active: true,
+      updated_by: user.user.id
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error inserting system payment config:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+/**
+ * Fetches all seller payment provider onboarding records (Super Admin only)
+ */
+export async function getSellerOnboardingProfiles() {
+  const { data, error } = await supabase
+    .from('payment_provider_accounts')
+    .select('*, profile:profiles(username)')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching seller onboarding records:', error);
+    return [];
+  }
+  return data || [];
+}
+
+/**
+ * Updates a seller's onboarding details (Super Admin only)
+ */
+export async function updateSellerOnboardingStatus(
+  accountId: string,
+  kycStatus: 'pending' | 'submitted' | 'verified' | 'rejected',
+  payoutEnabled: boolean,
+  onboardingStatus: 'pending' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'suspended',
+  failureReason?: string
+) {
+  const { data: user } = await supabase.auth.getUser();
+  if (!user || !user.user) throw new Error('Unauthenticated');
+
+  const { data, error } = await supabase
+    .from('payment_provider_accounts')
+    .update({
+      kyc_status: kycStatus,
+      payout_enabled: payoutEnabled,
+      onboarding_status: onboardingStatus,
+      failure_reason: failureReason || null,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', accountId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating seller onboarding details:', error);
+    throw error;
+  }
+
+  // Log in financial audit logs
+  await supabase.from('financial_audit_logs').insert({
+    actor_id: user.user.id,
+    action: 'vendor_onboarding_updated',
+    entity_type: 'audit',
+    entity_id: accountId,
+    new_value: data,
+    reason: `Onboarding status manually updated to ${onboardingStatus}`
+  });
+
+  return data;
 }
