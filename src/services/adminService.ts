@@ -493,36 +493,70 @@ export async function deactivateAdminUser(
 export async function getAdminReviews(statusFilter = 'all') {
   let query = supabase
     .from('ratings')
-    .select('*, reviewer:profiles!ratings_reviewer_id_fkey(username), reviewee:profiles!ratings_reviewee_id_fkey(username), auction:auctions!ratings_auction_id_fkey(title)');
+    .select('*, reviewer:profiles!ratings_reviewer_id_fkey(username), reviewee:profiles!ratings_reviewee_id_fkey(username)');
 
   if (statusFilter !== 'all') {
     query = query.eq('status', statusFilter);
   }
 
-  const { data, error } = await query.order('created_at', { ascending: false });
+  const { data: ratings, error } = await query.order('created_at', { ascending: false });
 
   if (error) {
     console.error('Error fetching admin reviews list:', error);
     return [];
   }
-  return data || [];
+
+  if (!ratings || ratings.length === 0) {
+    return [];
+  }
+
+  // Fetch auctions separately
+  const auctionIds = Array.from(new Set(ratings.map((r) => r.auction_id).filter(Boolean)));
+  let auctionsMap = new Map<string, any>();
+  if (auctionIds.length > 0) {
+    const { data: auctions } = await supabase
+      .from('auctions')
+      .select('id, title')
+      .in('id', auctionIds);
+    if (auctions) {
+      auctionsMap = new Map(auctions.map((a) => [a.id, a]));
+    }
+  }
+
+  return ratings.map((r) => ({
+    ...r,
+    auction: auctionsMap.get(r.auction_id) || null,
+  }));
 }
 
 /**
  * Fetches a single review by ID with details.
  */
 export async function getAdminReviewById(id: string) {
-  const { data, error } = await supabase
+  const { data: review, error } = await supabase
     .from('ratings')
-    .select('*, reviewer:profiles!ratings_reviewer_id_fkey(*), reviewee:profiles!ratings_reviewee_id_fkey(*), auction:auctions!ratings_auction_id_fkey(*)')
+    .select('*, reviewer:profiles!ratings_reviewer_id_fkey(*), reviewee:profiles!ratings_reviewee_id_fkey(*)')
     .eq('id', id)
     .single();
 
-  if (error) {
+  if (error || !review) {
     console.error('Error fetching admin review details:', error);
     return null;
   }
-  return data;
+
+  // Fetch auction separately
+  if (review.auction_id) {
+    const { data: auction } = await supabase
+      .from('auctions')
+      .select('*')
+      .eq('id', review.auction_id)
+      .single();
+    if (auction) {
+      review.auction = auction;
+    }
+  }
+
+  return review;
 }
 
 /**
