@@ -50,6 +50,7 @@ serve(async (req) => {
 
     const env = sysConfig?.payment_environment || "sandbox";
     const prodEnabled = sysConfig?.production_payments_enabled || false;
+    const providerActive = sysConfig?.provider_activation_status || "pending";
     const paymentsBlocked = sysConfig?.payments_blocked_globally || false;
 
     if (paymentsBlocked) {
@@ -66,12 +67,12 @@ serve(async (req) => {
       });
     }
 
-    if (env === "production" && !prodEnabled) {
+    if (env === "production" && (!prodEnabled || providerActive !== "active")) {
       await supabaseClient.from("financial_audit_logs").insert({
         actor_id: user.id,
         action: "production_payment_blocked",
         entity_type: "payment",
-        reason: "Attempted production checkout but safety switch is off."
+        reason: "Attempted production checkout but safety switch or provider activation is off."
       });
 
       return new Response(JSON.stringify({ error: "Production payments are currently unavailable." }), {

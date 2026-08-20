@@ -885,7 +885,8 @@ export async function updatePaymentSystemConfig(
   paymentEnvironment: 'sandbox' | 'production',
   paymentsBlockedGlobally: boolean = false,
   payoutsBlockedGlobally: boolean = false,
-  refundsBlockedGlobally: boolean = false
+  refundsBlockedGlobally: boolean = false,
+  providerActivationStatus: 'pending' | 'active' | 'blocked' = 'pending'
 ) {
   const { data: user } = await supabase.auth.getUser();
   if (!user || !user.user) throw new Error('Unauthenticated');
@@ -905,6 +906,7 @@ export async function updatePaymentSystemConfig(
       payments_blocked_globally: paymentsBlockedGlobally,
       payouts_blocked_globally: payoutsBlockedGlobally,
       refunds_blocked_globally: refundsBlockedGlobally,
+      provider_activation_status: providerActivationStatus,
       is_active: true,
       updated_by: user.user.id
     })
@@ -1034,4 +1036,76 @@ export async function updateReconciliationIssueStatus(
   });
 
   return data;
+}
+
+/**
+ * Executes a production readiness diagnostic check (Super Admin only)
+ */
+export async function getProductionReadinessCheck() {
+  const { data: user } = await supabase.auth.getUser();
+  if (!user || !user.user) throw new Error('Unauthenticated');
+
+  const { data: sysConfig } = await supabase
+    .from('payment_system_config')
+    .select('*')
+    .eq('is_active', true)
+    .maybeSingle();
+
+  const { data: openIssues } = await supabase
+    .from('financial_reconciliation_issues')
+    .select('id')
+    .eq('resolution_status', 'open');
+
+  const { data: sellers } = await supabase
+    .from('payment_provider_accounts')
+    .select('id, kyc_status, payout_enabled');
+
+  const reasons: string[] = [];
+  const checks = {
+    database: true,
+    paymentEnvironment: false,
+    productionPaymentsEnabled: false,
+    emergencyBlocks: false,
+    unresolvedReconciliationIssues: true,
+    sellerOnboarding: true,
+    webhookConfiguration: true,
+    providerConfiguration: true
+  };
+
+  if (sysConfig) {
+    checks.paymentEnvironment = sysConfig.payment_environment === 'sandbox' || sysConfig.payment_environment === 'production';
+    checks.productionPaymentsEnabled = sysConfig.production_payments_enabled === false || sysConfig.production_payments_enabled === true;
+    checks.emergencyBlocks = !sysConfig.payments_blocked_globally && !sysConfig.payouts_blocked_globally && !sysConfig.refunds_blocked_globally;
+    
+    if (sysConfig.payment_environment === 'production') {
+      if (sysConfig.provider_activation_status !== 'active') {
+        reasons.push('Cashfree production activation is pending / not active.');
+      }
+      if (!sysConfig.production_payments_enabled) {
+        reasons.push('Production payments toggle is disabled.');
+      }
+    }
+  } else {
+    reasons.push('System safety configuration is missing or inactive.');
+  }
+
+  if (openIssues && openIssues.length > 0) {
+    checks.unresolvedReconciliationIssues = false;
+    reasons.push(`Found ${openIssues.length} unresolved reconciliation issues.`);
+  }
+
+  const kycApprovedSellersCount = (sellers || []).filter(s => s.kyc_status === 'verified' && s.payout_enabled).length;
+  if (kycApprovedSellersCount === 0) {
+    checks.sellerOnboarding = false;
+    reasons.push('No verified onboarding seller profiles exist in the system.');
+  }
+
+  const status = reasons.length === 0 ? 'READY' : 'NOT_READY';
+
+  return {
+    status,
+    reasons,
+    checks,
+    config: sysConfig
+  };
 }
