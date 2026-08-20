@@ -159,3 +159,51 @@ export interface Report {
   created_at: string;
   updated_at: string;
 }
+
+export type DisputeStatus = 'open' | 'under_review' | 'resolved_buyer' | 'resolved_seller' | 'cancelled';
+
+export interface Dispute {
+  id: string;
+  transaction_id: string;
+  created_by: string;
+  reason: string;
+  description: string;
+  status: DisputeStatus;
+  resolution: string | null;
+  resolution_note: string | null;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+  transaction?: Transaction;
+  creator?: Profile;
+}
+
+export interface DisputeEvidence {
+  id: string;
+  dispute_id: string;
+  uploader_id: string;
+  storage_path: string;
+  created_at: string;
+  uploader?: Profile;
+}
+
+export interface DisputeEvent {
+  id: string;
+  dispute_id: string;
+  actor_id: string;
+  event_type: string;
+  metadata: any;
+  created_at: string;
+  actor?: Profile;
+}
+
+export interface TransactionEvent {
+  id: string;
+  transaction_id: string;
+  actor_id: string | null;
+  event_type: string;
+  from_status: string | null;
+  to_status: string | null;
+  created_at: string;
+  actor?: Profile;
+}

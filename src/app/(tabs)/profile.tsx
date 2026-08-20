@@ -91,9 +91,14 @@ export default function ProfileScreen() {
       action: () => router.push("/edit-profile" as any),
     },
     {
-      label: "My Sales (Listed Auctions)",
+      label: "My Listings (Listed Auctions)",
       icon: Gavel,
       action: () => router.push("/my-auctions" as any),
+    },
+    {
+      label: "My Sales Transactions",
+      icon: ShieldCheck,
+      action: () => router.push("/my-sales" as any),
     },
     {
       label: "My Purchases (Won Auctions)",
