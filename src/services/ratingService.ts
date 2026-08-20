@@ -122,7 +122,7 @@ export async function getRatingsForUser(
   // Use postgrest inner join filtering to filter on the nested auction seller_id
   let query = supabase
     .from('ratings')
-    .select('*, reviewer:profiles!ratings_reviewer_id_fkey(*), auction:auctions!inner(*)');
+    .select('*, reviewer:profiles!ratings_reviewer_id_fkey(*), auction:auctions!ratings_auction_id_fkey!inner(*)');
 
   if (role === 'seller') {
     query = query.eq('auction.seller_id', userId);

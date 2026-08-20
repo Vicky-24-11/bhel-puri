@@ -493,7 +493,7 @@ export async function deactivateAdminUser(
 export async function getAdminReviews(statusFilter = 'all') {
   let query = supabase
     .from('ratings')
-    .select('*, reviewer:profiles!ratings_reviewer_id_fkey(username), reviewee:profiles!ratings_reviewee_id_fkey(username), auction:auctions(title)');
+    .select('*, reviewer:profiles!ratings_reviewer_id_fkey(username), reviewee:profiles!ratings_reviewee_id_fkey(username), auction:auctions!ratings_auction_id_fkey(title)');
 
   if (statusFilter !== 'all') {
     query = query.eq('status', statusFilter);
@@ -514,7 +514,7 @@ export async function getAdminReviews(statusFilter = 'all') {
 export async function getAdminReviewById(id: string) {
   const { data, error } = await supabase
     .from('ratings')
-    .select('*, reviewer:profiles!ratings_reviewer_id_fkey(*), reviewee:profiles!ratings_reviewee_id_fkey(*), auction:auctions(*)')
+    .select('*, reviewer:profiles!ratings_reviewer_id_fkey(*), reviewee:profiles!ratings_reviewee_id_fkey(*), auction:auctions!ratings_auction_id_fkey(*)')
     .eq('id', id)
     .single();
 
