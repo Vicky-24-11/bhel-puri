@@ -41,55 +41,7 @@ serve(async (req) => {
       });
     }
 
-    // 1. Fetch system safety config
-    const { data: sysConfig } = await supabaseClient
-      .from("payment_system_config")
-      .select("*")
-      .eq("is_active", true)
-      .maybeSingle();
-
-    const env = sysConfig?.payment_environment || "sandbox";
-    const prodEnabled = sysConfig?.production_payments_enabled || false;
-    const refundsBlocked = sysConfig?.refunds_blocked_globally || false;
-
-    if (refundsBlocked) {
-      await supabaseClient.from("financial_audit_logs").insert({
-        actor_id: user.id,
-        action: "refund_creation_blocked",
-        entity_type: "refund",
-        reason: "Refund execution blocked globally by emergency toggle."
-      });
-
-      return new Response(JSON.stringify({ error: "Refunds are temporarily suspended." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (env === "production" && !prodEnabled) {
-      return new Response(JSON.stringify({ error: "Production refunds are currently unavailable." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // 2. Verify user is a Super Admin
-    const { data: adminUser } = await supabaseClient
-      .from("admin_users")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    const isSuperAdmin = adminUser?.role === "super_admin";
-    if (!isSuperAdmin) {
-      return new Response(JSON.stringify({ error: "Access Denied: Only Super Admins can issue refunds." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // 3. Fetch payment registry record
+    // 1. Fetch current payment details
     const { data: payment, error: pmError } = await supabaseClient
       .from("payments")
       .select("*")
@@ -103,22 +55,22 @@ serve(async (req) => {
       });
     }
 
-    // 4. Check refund boundary
-    const { data: existingRefunds } = await supabaseClient
-      .from("payment_refunds")
-      .select("amount")
-      .eq("payment_id", paymentId)
-      .in("status", ["pending", "processed"]);
-
-    const totalRefunded = (existingRefunds || []).reduce((acc: number, r: any) => acc + Number(r.amount), 0);
-    if ((totalRefunded + Number(amount)) > Number(payment.amount)) {
-      return new Response(JSON.stringify({ error: `Rejected: Refund sum (₹${totalRefunded + Number(amount)}) would exceed captured amount (₹${payment.amount}).` }), {
-        status: 400,
+    // Short-circuit if already refunded (idempotent check)
+    if (payment.status === "refunded") {
+      return new Response(JSON.stringify({ success: true, message: "Payment already fully refunded." }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // 5. Configure Cashfree keys and URLs
+    // Configure keys and URLs
+    const { data: sysConfig } = await supabaseClient
+      .from("payment_system_config")
+      .select("*")
+      .eq("is_active", true)
+      .maybeSingle();
+
+    const env = sysConfig?.payment_environment || "sandbox";
     let appId, secretKey, cfUrl;
     if (env === "production") {
       appId = Deno.env.get("CASHFREE_PROD_APP_ID") || "";
@@ -130,10 +82,67 @@ serve(async (req) => {
       cfUrl = `https://sandbox.cashfree.com/pg/orders/${payment.id}/refunds`;
     }
 
-    const providerRefundId = `cf_rf_${Date.now()}`;
+    // 2. Handle recovery flow if in refund_pending status
+    if (payment.status === "refund_pending") {
+      const { data: refund } = await supabaseClient
+        .from("payment_refunds")
+        .select("*")
+        .eq("payment_id", paymentId)
+        .eq("amount", amount)
+        .maybeSingle();
 
-    // 6. Invoke Cashfree PG Refund API
-    let refundStatus = "processed";
+      if (refund) {
+        await supabaseClient.from("payments").update({ status: "refunded" }).eq("id", paymentId);
+        return new Response(JSON.stringify({ success: true, recovered: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (appId && secretKey) {
+        try {
+          const cfResponse = await fetch(cfUrl, {
+            method: "GET",
+            headers: {
+              "x-api-version": "2023-08-01",
+              "x-client-id": appId,
+              "x-client-secret": secretKey,
+            }
+          });
+          if (cfResponse.ok) {
+            const cfData = await cfResponse.json();
+            // If matching refund exists on provider, restore status to refunded
+            if (cfData && cfData.length > 0) {
+              await supabaseClient.from("payments").update({ status: "refunded" }).eq("id", paymentId);
+              return new Response(JSON.stringify({ success: true, recovered: true, providerVerified: true }), {
+                status: 200,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
+            }
+          }
+        } catch (apiErr) {
+          console.warn("GET refunds lookup failed during recovery:", apiErr);
+        }
+      }
+    }
+
+    // 3. STAGE 1 — DATABASE ATOMIC CLAIM (via RPC)
+    const { data: claim, error: claimErr } = await supabaseClient.rpc("claim_refund_create", {
+      p_payment_id: paymentId,
+      p_amount: amount
+    });
+
+    if (claimErr || !claim?.success) {
+      return new Response(JSON.stringify({ error: claimErr?.message || "Failed to claim atomic refund status lock." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // 4. STAGE 2 — PROVIDER OPERATION (after DB transaction commits)
+    const providerRefundId = `cf_rf_${Date.now()}`;
+    let refundSuccess = true;
+
     if (appId && secretKey) {
       try {
         const cfResponse = await fetch(cfUrl, {
@@ -155,69 +164,71 @@ serve(async (req) => {
           const cfData = await cfResponse.json();
           console.warn("Cashfree Refund API warning:", cfData);
           if (env === "production") {
-            return new Response(JSON.stringify({ error: cfData.message || "Provider Refund API failed" }), {
-              status: cfResponse.status,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
+            refundSuccess = false;
           }
         }
-      } catch (apiErr) {
-        console.error("Cashfree Refund API exception:", apiErr);
-        if (env === "production") {
-          throw apiErr;
-        }
+      } catch (err) {
+        console.error("Cashfree Refund API error:", err);
+        refundSuccess = false;
       }
     }
 
-    // 7. Insert refund record
-    const { data: refund, error: rfError } = await supabaseClient
-      .from("payment_refunds")
-      .insert({
-        payment_id: paymentId,
-        razorpay_refund_id: providerRefundId,
-        amount: amount,
-        status: refundStatus,
-        processed_at: new Date().toISOString()
-      })
-      .select()
-      .single();
+    // 5. Update terminal status
+    let finalStatus = payment.status;
+    if (refundSuccess) {
+      // Check partial refund status
+      const { data: existingRefunds } = await supabaseClient
+        .from("payment_refunds")
+        .select("amount")
+        .eq("payment_id", paymentId)
+        .in("status", ["pending", "processed"]);
 
-    if (rfError) throw rfError;
+      const totalRefunded = (existingRefunds || []).reduce((acc: number, r: any) => acc + Number(r.amount), 0);
+      const finalRefundTotal = totalRefunded + Number(amount);
+      const isFullRefund = finalRefundTotal >= Number(payment.amount);
 
-    // Update payment status to refunded ONLY if fully returned
-    const finalRefundTotal = totalRefunded + Number(amount);
-    const isFullRefund = finalRefundTotal >= Number(payment.amount);
+      finalStatus = isFullRefund ? "refunded" : "captured";
 
-    if (isFullRefund) {
       await supabaseClient
         .from("payments")
         .update({
-          status: "refunded",
-          refunded_at: new Date().toISOString()
+          status: finalStatus,
+          refunded_at: isFullRefund ? new Date().toISOString() : null
         })
         .eq("id", paymentId);
+
+      // Insert refund record
+      await supabaseClient
+        .from("payment_refunds")
+        .insert({
+          payment_id: paymentId,
+          razorpay_refund_id: providerRefundId,
+          amount: amount,
+          status: "processed",
+          processed_at: new Date().toISOString()
+        });
+
+      // Log financial audit event
+      await supabaseClient
+        .from("financial_audit_logs")
+        .insert({
+          actor_id: user.id,
+          action: "refund_processed",
+          entity_type: "refund",
+          new_value: { paymentId, amount, providerRefundId },
+          reason: "Super Admin resolution refund"
+        });
+    } else {
+      // Revert status to captured on failure
+      await supabaseClient.from("payments").update({ status: "captured" }).eq("id", paymentId);
     }
 
-    // Log financial audit event
-    await supabaseClient
-      .from("financial_audit_logs")
-      .insert({
-        actor_id: user.id,
-        action: "refund_processed",
-        entity_type: "refund",
-        entity_id: refund.id,
-        new_value: { paymentId, amount, providerRefundId },
-        reason: "Super Admin resolution refund"
-      });
-
     return new Response(JSON.stringify({
-      refundId: refund.id,
-      cfRefundId: providerRefundId,
-      amount: amount,
-      status: refundStatus,
-      processedAt: refund.processed_at
+      success: refundSuccess,
+      status: finalStatus,
+      cfRefundId: providerRefundId
     }), {
-      status: 200,
+      status: refundSuccess ? 200 : 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
