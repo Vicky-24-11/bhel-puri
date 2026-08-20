@@ -18,6 +18,7 @@ import {
   updateSellerOnboardingStatus,
   getFinancialReconciliationIssues,
   updateReconciliationIssueStatus,
+  getProductionReadinessCheck,
 } from '@/services/adminService';
 
 export default function FinancialDashboardScreen() {
@@ -36,6 +37,8 @@ export default function FinancialDashboardScreen() {
   const [paymentsBlocked, setPaymentsBlocked] = useState(false);
   const [payoutsBlocked, setPayoutsBlocked] = useState(false);
   const [refundsBlocked, setRefundsBlocked] = useState(false);
+  const [readinessCheck, setReadinessCheck] = useState<any>(null);
+  const [providerActivationStatus, setProviderActivationStatus] = useState<'pending' | 'active' | 'blocked'>('pending');
   
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -91,12 +94,14 @@ export default function FinancialDashboardScreen() {
     newProdEnabled: boolean,
     blockPayments?: boolean,
     blockPayouts?: boolean,
-    blockRefunds?: boolean
+    blockRefunds?: boolean,
+    newActivationStatus?: 'pending' | 'active' | 'blocked'
   ) => {
     try {
       const targetPaymentsBlocked = blockPayments !== undefined ? blockPayments : paymentsBlocked;
       const targetPayoutsBlocked = blockPayouts !== undefined ? blockPayouts : payoutsBlocked;
       const targetRefundsBlocked = blockRefunds !== undefined ? blockRefunds : refundsBlocked;
+      const targetActivationStatus = newActivationStatus !== undefined ? newActivationStatus : providerActivationStatus;
 
       const triggerAction = async () => {
         setLoading(true);
@@ -105,7 +110,8 @@ export default function FinancialDashboardScreen() {
           newEnv,
           targetPaymentsBlocked,
           targetPayoutsBlocked,
-          targetRefundsBlocked
+          targetRefundsBlocked,
+          targetActivationStatus
         );
         await loadData();
       };
@@ -116,7 +122,19 @@ export default function FinancialDashboardScreen() {
           'WARNING: Real customer payments and payouts will be enabled. Are you sure you want to enable production payments?',
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Enable Production', onPress: triggerAction }
+            {
+              text: 'Proceed',
+              onPress: () => {
+                Alert.alert(
+                  'Final Production Gate Warning',
+                  'I understand that enabling production payments will allow real-money transactions. Do you wish to proceed?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Enable Production', onPress: triggerAction }
+                  ]
+                );
+              }
+            }
           ]
         );
       } else {
@@ -191,6 +209,7 @@ export default function FinancialDashboardScreen() {
         sysConf,
         sellers,
         issues,
+        readiness,
       ] = await Promise.all([
         getFinancialStats(),
         getPlatformFeeConfig(),
@@ -201,6 +220,7 @@ export default function FinancialDashboardScreen() {
         getPaymentSystemConfig(),
         getSellerOnboardingProfiles(),
         getFinancialReconciliationIssues(),
+        getProductionReadinessCheck(),
       ]);
 
       setStats(statsData);
@@ -212,6 +232,7 @@ export default function FinancialDashboardScreen() {
       setSystemConfig(sysConf);
       setSellerOnboardingList(sellers);
       setReconciliationIssues(issues);
+      setReadinessCheck(readiness);
 
       if (feeConfig) setNewCommissionRate(feeConfig.commission_rate.toString());
       if (protectConfig) {
@@ -225,6 +246,7 @@ export default function FinancialDashboardScreen() {
         setPaymentsBlocked(sysConf.payments_blocked_globally || false);
         setPayoutsBlocked(sysConf.payouts_blocked_globally || false);
         setRefundsBlocked(sysConf.refunds_blocked_globally || false);
+        setProviderActivationStatus(sysConf.provider_activation_status || 'pending');
       }
     } catch (err) {
       console.error('Error loading financial admin data:', err);
@@ -295,6 +317,51 @@ export default function FinancialDashboardScreen() {
           <RefreshCw size={14} color="#FF6B35" className={refreshing ? 'animate-spin' : ''} />
           <Text className="text-brand-primary font-display font-bold text-xs">Refresh</Text>
         </Pressable>
+      </View>
+
+      {/* Production Readiness Control Center */}
+      <View className="bg-white border border-stone-200 p-6 rounded-3xl shadow-sm gap-4 mb-8">
+        <View className="flex-row items-center gap-2">
+          <Shield size={20} color="#FF6B35" />
+          <Text className="text-base font-display font-bold text-brand-text">Production Readiness Gate</Text>
+        </View>
+
+        <View className="flex-row flex-wrap gap-4 mt-2">
+          <View className={`flex-1 min-w-[200px] p-4 rounded-2xl border ${readinessCheck?.status === 'READY' ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
+            <Text className="text-[10px] font-display font-bold text-stone-500 uppercase tracking-wide">Technical Readiness</Text>
+            <Text className={`text-lg font-display font-extrabold mt-1 ${readinessCheck?.status === 'READY' ? 'text-emerald-700' : 'text-amber-700'}`}>
+              {readinessCheck?.status || 'UNKNOWN'}
+            </Text>
+          </View>
+
+          <View className="flex-1 min-w-[200px] bg-stone-50 border border-stone-100 p-4 rounded-2xl">
+            <Text className="text-[10px] font-display font-bold text-stone-500 uppercase tracking-wide">Cashfree Activation Status</Text>
+            <View className="flex-row gap-1.5 mt-2">
+              {(['pending', 'active', 'blocked'] as const).map((status) => (
+                <Pressable
+                  key={status}
+                  onPress={() => handleUpdateSystemConfig(paymentEnvironment, productionPaymentsEnabled, paymentsBlocked, payoutsBlocked, refundsBlocked, status)}
+                  className={`px-2.5 py-1 rounded-lg border ${providerActivationStatus === status ? 'bg-brand-primary border-brand-primary' : 'bg-white border-stone-200'}`}
+                >
+                  <Text className={`text-[10px] font-display font-bold uppercase ${providerActivationStatus === status ? 'text-white' : 'text-stone-600'}`}>
+                    {status}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        {readinessCheck?.reasons && readinessCheck.reasons.length > 0 && (
+          <View className="bg-stone-50 p-4 rounded-2xl mt-2">
+            <Text className="text-xs font-display font-bold text-brand-text mb-2">Unresolved Launch Prerequisites:</Text>
+            {readinessCheck.reasons.map((reason: string, idx: number) => (
+              <Text key={idx} className="text-[11px] font-display text-rose-600 mt-1">
+                • {reason}
+              </Text>
+            ))}
+          </View>
+        )}
       </View>
 
       {/* System Environment Safety Config */}

@@ -50,8 +50,9 @@ serve(async (req) => {
 
     const env = sysConfig?.payment_environment || "sandbox";
     const prodEnabled = sysConfig?.production_payments_enabled || false;
+    const providerActive = sysConfig?.provider_activation_status || "pending";
 
-    if (env === "production" && !prodEnabled) {
+    if (env === "production" && (!prodEnabled || providerActive !== "active")) {
       return new Response(JSON.stringify({ error: "Production verification is currently unavailable." }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
