@@ -41,50 +41,7 @@ serve(async (req) => {
       });
     }
 
-    // 1. Fetch system safety config
-    const { data: sysConfig } = await supabaseClient
-      .from("payment_system_config")
-      .select("*")
-      .eq("is_active", true)
-      .maybeSingle();
-
-    const env = sysConfig?.payment_environment || "sandbox";
-    const prodEnabled = sysConfig?.production_payments_enabled || false;
-    const payoutsBlocked = sysConfig?.payouts_blocked_globally || false;
-
-    if (payoutsBlocked) {
-      await supabaseClient.from("financial_audit_logs").insert({
-        actor_id: user.id,
-        action: "payout_blocked_emergency",
-        entity_type: "payment",
-        entity_id: paymentId,
-        reason: "Payout blocked globally by emergency toggle."
-      });
-
-      return new Response(JSON.stringify({ error: "Seller payouts are temporarily suspended." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (env === "production" && !prodEnabled) {
-      return new Response(JSON.stringify({ error: "Production payouts are currently unavailable." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // 2. Fetch admin status
-    const { data: adminUser } = await supabaseClient
-      .from("admin_users")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    const isSuperAdmin = adminUser?.role === "super_admin";
-
-    // 3. Fetch payment details
+    // 1. Fetch current payment details
     const { data: payment, error: pmError } = await supabaseClient
       .from("payments")
       .select("*, transaction:transactions(*)")
@@ -99,96 +56,169 @@ serve(async (req) => {
     }
 
     const isBuyer = payment.transaction?.buyer_id === user.id;
-    if (!isSuperAdmin && !isBuyer) {
-      return new Response(JSON.stringify({ error: "Access Denied: Unauthorized to confirm receipt." }), {
-        status: 403,
+
+    // 2. Short-circuit if already processed successfully (idempotent)
+    if (payment.status === "released") {
+      return new Response(JSON.stringify({ success: true, message: "Payout already released." }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // 4. Status checks
-    if (payment.status !== "held" && payment.status !== "captured") {
-      return new Response(JSON.stringify({ error: "Payment is not in hold/captured status." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Check active disputes
-    const { data: activeDisputes } = await supabaseClient
-      .from("disputes")
-      .select("id")
-      .eq("transaction_id", payment.transaction_id)
-      .in("status", ["open", "under_review"]);
-
-    if (activeDisputes && activeDisputes.length > 0) {
-      return new Response(JSON.stringify({ error: "Blocked: An active dispute is open on this transaction." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // 5. Query seller onboarding account KYC/eligibility details
-    const { data: sellerAccount } = await supabaseClient
-      .from("payment_provider_accounts")
+    // 3. Configure Cashfree keys and URLs
+    const { data: sysConfig } = await supabaseClient
+      .from("payment_system_config")
       .select("*")
-      .eq("user_id", payment.transaction.seller_id)
+      .eq("is_active", true)
       .maybeSingle();
 
-    if (!sellerAccount || !sellerAccount.payout_enabled) {
-      return new Response(JSON.stringify({ error: "Blocked: Seller payouts are disabled due to incomplete verification/KYC status." }), {
+    const env = sysConfig?.payment_environment || "sandbox";
+    let appId, secretKey, cfUrl;
+    if (env === "production") {
+      appId = Deno.env.get("CASHFREE_PROD_APP_ID") || "";
+      secretKey = Deno.env.get("CASHFREE_PROD_SECRET_KEY") || "";
+      cfUrl = `https://api.cashfree.com/pg/orders/${payment.id}/splits`;
+    } else {
+      appId = Deno.env.get("CASHFREE_SANDBOX_APP_ID") || "TEST1027170134b2203ddb72c9bc44d110717201";
+      secretKey = Deno.env.get("CASHFREE_SANDBOX_SECRET_KEY") || "cfsk_ma_test_04c55ec3e7fead17a7e17424b9148560_050d2bc4";
+      cfUrl = `https://sandbox.cashfree.com/pg/orders/${payment.id}/splits`;
+    }
+
+    // 4. Handle recovery flow if in release_pending status
+    if (payment.status === "release_pending") {
+      // Check if transfer is already logged internally
+      const { data: transfer } = await supabaseClient
+        .from("payment_transfers")
+        .select("*")
+        .eq("payment_id", paymentId)
+        .maybeSingle();
+
+      if (transfer) {
+        // Recover state
+        await supabaseClient.from("payments").update({ status: "released" }).eq("id", paymentId);
+        return new Response(JSON.stringify({ success: true, recovered: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Check provider details
+      if (appId && secretKey) {
+        try {
+          const cfResponse = await fetch(cfUrl, {
+            method: "GET",
+            headers: {
+              "x-api-version": "2023-08-01",
+              "x-client-id": appId,
+              "x-client-secret": secretKey,
+            }
+          });
+          if (cfResponse.ok) {
+            const cfData = await cfResponse.json();
+            // If split details exist on provider, transition to released
+            if (cfData && cfData.length > 0) {
+              await supabaseClient.from("payments").update({ status: "released" }).eq("id", paymentId);
+              return new Response(JSON.stringify({ success: true, recovered: true, providerVerified: true }), {
+                status: 200,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
+            }
+          }
+        } catch (apiErr) {
+          console.warn("GET splits lookup failed during recovery checks:", apiErr);
+        }
+      }
+    }
+
+    // 5. STAGE 1 — DATABASE ATOMIC CLAIM (via RPC)
+    const { data: claim, error: claimErr } = await supabaseClient.rpc("claim_payout_release", {
+      p_payment_id: paymentId,
+      p_actor_id: user.id
+    });
+
+    if (claimErr || !claim?.success) {
+      return new Response(JSON.stringify({ error: claimErr?.message || "Failed to claim atomic payout status lock." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // 6. Update status conditionally (prevents concurrent race conditions)
-    const { data: updatedPayment, error: updateError } = await supabaseClient
+    // 6. STAGE 2 — PROVIDER OPERATION (after DB transaction commits)
+    const sellerOnboardingId = `acct_${payment.transaction?.seller_id.slice(0, 8)}`;
+    const providerTransferId = `cf_tr_${Date.now()}`;
+
+    let payoutSuccess = true;
+    if (appId && secretKey) {
+      try {
+        const cfResponse = await fetch(cfUrl, {
+          method: "POST",
+          headers: {
+            "x-api-version": "2023-08-01",
+            "x-client-id": appId,
+            "x-client-secret": secretKey,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify([
+            {
+              vendorId: sellerOnboardingId,
+              amount: Number(payment.seller_payable_amount)
+            }
+          ]),
+        });
+
+        if (!cfResponse.ok) {
+          const cfData = await cfResponse.json();
+          console.warn("Cashfree Split API warning:", cfData);
+          if (env === "production") {
+            payoutSuccess = false;
+          }
+        }
+      } catch (err) {
+        console.error("Cashfree Split API error:", err);
+        payoutSuccess = false;
+      }
+    }
+
+    // 7. Update terminal status
+    const finalStatus = payoutSuccess ? "released" : "failed";
+    await supabaseClient
       .from("payments")
       .update({
-        status: "released",
-        released_at: new Date().toISOString()
+        status: finalStatus,
+        released_at: payoutSuccess ? new Date().toISOString() : null
       })
-      .eq("id", paymentId)
-      .in("status", ["held", "captured"])
-      .select()
-      .maybeSingle();
+      .eq("id", paymentId);
 
-    if (updateError || !updatedPayment) {
-      return new Response(JSON.stringify({ error: "Payout release failed: payment already processed or released." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (payoutSuccess) {
+      // Create transfer details
+      await supabaseClient
+        .from("payment_transfers")
+        .insert({
+          payment_id: paymentId,
+          razorpay_transfer_id: providerTransferId,
+          linked_account_id: sellerOnboardingId,
+          amount: payment.seller_payable_amount,
+          status: "processed",
+          settlement_on_hold: false,
+          processed_at: new Date().toISOString(),
+          settled_at: new Date().toISOString()
+        });
+
+      // Log financial audit event
+      await supabaseClient
+        .from("financial_audit_logs")
+        .insert({
+          actor_id: user.id,
+          action: "payout_released",
+          entity_type: "payment",
+          entity_id: paymentId,
+          new_value: { paymentId, released: true },
+          reason: isBuyer ? "Buyer confirmed receipt" : "Super Admin released payout"
+        });
     }
 
-    // Create a payout transfer record
-    await supabaseClient
-      .from("payment_transfers")
-      .insert({
-        payment_id: paymentId,
-        razorpay_transfer_id: `cf_tr_${Date.now()}`,
-        linked_account_id: sellerAccount?.provider_account_id || `acct_${payment.transaction?.seller_id.slice(0, 8)}`,
-        amount: payment.seller_payable_amount,
-        status: "processed",
-        settlement_on_hold: false,
-        processed_at: new Date().toISOString(),
-        settled_at: new Date().toISOString()
-      });
-
-    // Write audit event
-    await supabaseClient
-      .from("financial_audit_logs")
-      .insert({
-        actor_id: user.id,
-        action: "payout_released",
-        entity_type: "payment",
-        entity_id: paymentId,
-        new_value: { paymentId, released: true },
-        reason: isBuyer ? "Buyer confirmed receipt" : "Super Admin released payout"
-      });
-
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
+    return new Response(JSON.stringify({ success: payoutSuccess, status: finalStatus }), {
+      status: payoutSuccess ? 200 : 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 

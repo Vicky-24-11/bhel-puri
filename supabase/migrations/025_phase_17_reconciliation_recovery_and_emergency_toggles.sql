@@ -37,5 +37,6 @@ ALTER TABLE public.financial_reconciliation_issues ENABLE ROW LEVEL SECURITY;
 
 -- 4. RLS Policies
 -- Only Super Admins can access and manage discrepancies
+DROP POLICY IF EXISTS manage_reconciliation_issues ON public.financial_reconciliation_issues;
 CREATE POLICY manage_reconciliation_issues ON public.financial_reconciliation_issues
   FOR ALL USING (public.get_admin_role(auth.uid()) = 'super_admin');
