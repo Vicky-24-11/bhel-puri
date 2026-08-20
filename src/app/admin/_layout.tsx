@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ActivityIndicator, Pressable, ScrollView } from 'react-native';
 import { Slot, useRouter, usePathname, Redirect } from 'expo-router';
-import { LayoutDashboard, Users, ShoppingBag, Gavel, AlertOctagon, ShieldAlert, ArrowLeft, ClipboardList } from 'lucide-react-native';
+import { LayoutDashboard, Users, ShoppingBag, Gavel, AlertOctagon, ShieldAlert, ArrowLeft, ClipboardList, Star } from 'lucide-react-native';
 import { useAuth } from '@/lib/AuthContext';
 import { getAdminRole } from '@/services/adminService';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -83,6 +83,7 @@ export default function AdminLayout() {
     { label: 'Transactions', path: '/admin/transactions', icon: ClipboardList, show: isSupport },
     { label: 'Reports', path: '/admin/reports', icon: AlertOctagon, show: isSupport },
     { label: 'Disputes', path: '/admin/disputes', icon: ShieldAlert, show: isSupport },
+    { label: 'Reviews', path: '/admin/reviews', icon: Star, show: isSupport },
     { label: 'Audit Logs', path: '/admin/audit-logs', icon: ClipboardList, show: isSuperAdmin },
     { label: 'Admin Management', path: '/admin/admins', icon: ShieldAlert, show: isSuperAdmin },
   ].filter(l => l.show);
@@ -98,6 +99,9 @@ export default function AdminLayout() {
     return <Redirect href="/admin" />;
   }
   if (pathname.includes('/admin/disputes') && !isSupport) {
+    return <Redirect href="/admin" />;
+  }
+  if (pathname.includes('/admin/reviews') && !isSupport) {
     return <Redirect href="/admin" />;
   }
   if ((pathname.includes('/admin/listings') || pathname.includes('/admin/auctions')) && !isModerator) {

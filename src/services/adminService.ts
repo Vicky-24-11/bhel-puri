@@ -486,3 +486,126 @@ export async function deactivateAdminUser(
 
   return true;
 }
+
+/**
+ * Fetches reviews and ratings for admin moderation.
+ */
+export async function getAdminReviews(statusFilter = 'all') {
+  let query = supabase
+    .from('ratings')
+    .select('*, reviewer:profiles!ratings_reviewer_id_fkey(username), reviewee:profiles!ratings_reviewee_id_fkey(username)');
+
+  if (statusFilter !== 'all') {
+    query = query.eq('status', statusFilter);
+  }
+
+  const { data: ratings, error } = await query.order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching admin reviews list:', error);
+    return [];
+  }
+
+  if (!ratings || ratings.length === 0) {
+    return [];
+  }
+
+  // Fetch auctions separately
+  const auctionIds = Array.from(new Set(ratings.map((r) => r.auction_id).filter(Boolean)));
+  let auctionsMap = new Map<string, any>();
+  if (auctionIds.length > 0) {
+    const { data: auctions } = await supabase
+      .from('auctions')
+      .select('id, title')
+      .in('id', auctionIds);
+    if (auctions) {
+      auctionsMap = new Map(auctions.map((a) => [a.id, a]));
+    }
+  }
+
+  return ratings.map((r) => ({
+    ...r,
+    auction: auctionsMap.get(r.auction_id) || null,
+  }));
+}
+
+/**
+ * Fetches a single review by ID with details.
+ */
+export async function getAdminReviewById(id: string) {
+  const { data: review, error } = await supabase
+    .from('ratings')
+    .select('*, reviewer:profiles!ratings_reviewer_id_fkey(*), reviewee:profiles!ratings_reviewee_id_fkey(*)')
+    .eq('id', id)
+    .single();
+
+  if (error || !review) {
+    console.error('Error fetching admin review details:', error);
+    return null;
+  }
+
+  // Fetch auction separately
+  if (review.auction_id) {
+    const { data: auction } = await supabase
+      .from('auctions')
+      .select('*')
+      .eq('id', review.auction_id)
+      .single();
+    if (auction) {
+      review.auction = auction;
+    }
+  }
+
+  return review;
+}
+
+/**
+ * Moderates a review by changing its status (published, hidden, removed).
+ */
+export async function moderateReview(
+  id: string,
+  newStatus: 'published' | 'hidden' | 'removed',
+  reason: string
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('ratings')
+    .update({ status: newStatus })
+    .eq('id', id)
+    .select('reviewer_id, reviewee_id, rating_value, auction_id')
+    .single();
+
+  if (error) {
+    console.error('Error moderating review:', error);
+    throw new Error(error.message || 'Failed to moderate review.');
+  }
+
+  // Write audit log
+  await writeAuditLog(
+    `REVIEW_MODERATED_${newStatus.toUpperCase()}`,
+    'report',
+    id,
+    reason || `Set status to ${newStatus}`
+  );
+
+  // Send notification to the reviewer to alert them of moderation action
+  try {
+    let title = '📢 Review Update';
+    let body = 'Your transaction review was reviewed by support.';
+    if (newStatus === 'hidden' || newStatus === 'removed') {
+      title = '⚠️ Review Moderated';
+      body = 'Your submitted review was hidden/removed due to community guidelines violation.';
+    }
+
+    await supabase.from('notifications').insert({
+      user_id: data.reviewer_id,
+      type: 'new_message',
+      title,
+      body,
+      auction_id: data.auction_id,
+    });
+  } catch (notifErr) {
+    console.warn('Failed to insert review moderation notification:', notifErr);
+  }
+
+  return true;
+}

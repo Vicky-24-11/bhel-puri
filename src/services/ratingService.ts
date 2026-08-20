@@ -119,27 +119,55 @@ export async function getRatingsForUser(
   limit = 10,
   offset = 0
 ) {
-  // Use postgrest inner join filtering to filter on the nested auction seller_id
-  let query = supabase
+  // Query ratings and join reviewer profile (which works perfectly)
+  const { data: ratings, error } = await supabase
     .from('ratings')
-    .select('*, reviewer:profiles!ratings_reviewer_id_fkey(*), auction:auctions!inner(*)');
-
-  if (role === 'seller') {
-    query = query.eq('auction.seller_id', userId);
-  } else if (role === 'buyer') {
-    query = query.neq('auction.seller_id', userId);
-  }
-
-  const { data, error } = await query
+    .select('*, reviewer:profiles!ratings_reviewer_id_fkey(*)')
     .eq('reviewee_id', userId)
-    .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1);
+    .order('created_at', { ascending: false });
 
   if (error) {
     console.error('Error fetching ratings for user:', error);
     return [];
   }
-  return data;
+
+  if (!ratings || ratings.length === 0) {
+    return [];
+  }
+
+  // Extract all unique auction IDs
+  const auctionIds = Array.from(new Set(ratings.map((r) => r.auction_id).filter(Boolean)));
+
+  // Query auctions separately (which bypasses schema cache constraint bugs)
+  let auctionsMap = new Map<string, any>();
+  if (auctionIds.length > 0) {
+    const { data: auctions, error: auctionErr } = await supabase
+      .from('auctions')
+      .select('id, title, seller_id')
+      .in('id', auctionIds);
+
+    if (auctionErr) {
+      console.warn('Failed to fetch auction details for ratings:', auctionErr);
+    } else if (auctions) {
+      auctionsMap = new Map(auctions.map((a) => [a.id, a]));
+    }
+  }
+
+  // Map auctions back and filter by role in-memory if specified
+  const mapped = ratings.map((r) => ({
+    ...r,
+    auction: auctionsMap.get(r.auction_id) || null,
+  }));
+
+  const filtered = role
+    ? mapped.filter((r) => {
+        const isSeller = r.auction?.seller_id === userId;
+        return role === 'seller' ? isSeller : !isSeller;
+      })
+    : mapped;
+
+  // Apply pagination range manually
+  return filtered.slice(offset, offset + limit);
 }
 
 /**

@@ -8,6 +8,8 @@ import { getTransactionById, updateTransactionStatus, TransactionWithDetails } f
 import { createAuctionConversation } from '@/services/chatService';
 import { TransactionStatus, Dispute } from '@/types/database.types';
 import { getDisputeByTransactionId, getDisputeEvidence, getSignedEvidenceUrl, getTransactionEvents, getDisputeEvents } from '@/services/disputeService';
+import { getRatingByReviewer } from '@/services/ratingService';
+import { LeaveReviewModal } from '@/components/ui/LeaveReviewModal';
 
 export default function TransactionDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -23,6 +25,10 @@ export default function TransactionDetailsScreen() {
   const [dispute, setDispute] = useState<Dispute | null>(null);
   const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
   const [timelineEvents, setTimelineEvents] = useState<any[]>([]);
+
+  // Rating & Review State
+  const [hasRated, setHasRated] = useState<boolean>(false);
+  const [showReviewModal, setShowReviewModal] = useState<boolean>(false);
 
   // Load transaction and user details
   const loadDetails = useCallback(async () => {
@@ -54,6 +60,10 @@ export default function TransactionDetailsScreen() {
       }
 
       setTransaction(tx);
+
+      // Check if user has already rated this transaction
+      const ratingExists = await getRatingByReviewer(tx.auction_id, user.id);
+      setHasRated(!!ratingExists);
 
       // Fetch Dispute Info if any
       const disp = await getDisputeByTransactionId(tx.id);
@@ -460,8 +470,55 @@ export default function TransactionDetailsScreen() {
             </Text>
           </View>
 
+          {/* Card 7: Transaction Review Card */}
+          {isCompleted && (
+            <View className="bg-white border border-stone-200 rounded-3xl p-5 shadow-sm gap-3">
+              <View className="flex-row items-center gap-2">
+                <ShieldCheck size={18} color="#FF6B35" />
+                <Text className="text-sm font-display font-bold text-brand-text">
+                  Transaction Review
+                </Text>
+              </View>
+              {hasRated ? (
+                <Text className="text-xs font-display text-emerald-600 font-bold leading-relaxed">
+                  ✓ You have submitted feedback for this transaction. Thank you for building marketplace trust!
+                </Text>
+              ) : (
+                <View className="gap-3">
+                  <Text className="text-xs font-display text-brand-muted leading-relaxed">
+                    Share your feedback to help other buyers and sellers make safe trades.
+                  </Text>
+                  <Pressable
+                    onPress={() => setShowReviewModal(true)}
+                    className="w-full h-11 bg-brand-primary rounded-xl items-center justify-center active:opacity-95"
+                  >
+                    <Text className="text-white font-display font-bold text-sm">
+                      Leave Rating & Review
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
+          )}
+
         </View>
       </ScrollView>
+
+      {transaction && currentUser && (
+        <LeaveReviewModal
+          visible={showReviewModal}
+          onClose={() => setShowReviewModal(false)}
+          onSubmitSuccess={() => {
+            setHasRated(true);
+            loadDetails(); // Reload details and timeline
+          }}
+          transactionId={transaction.id}
+          auctionId={transaction.auction_id}
+          reviewerId={currentUser.id}
+          revieweeId={isSeller ? transaction.buyer_id : transaction.seller_id}
+          targetName={partnerProfile?.username || 'user'}
+        />
+      )}
     </SafeAreaView>
   );
 }
