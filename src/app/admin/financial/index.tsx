@@ -364,6 +364,24 @@ export default function FinancialDashboardScreen() {
         )}
       </View>
 
+      {/* Alerts & Monitoring Notifications Banner */}
+      {(paymentsBlocked || payoutsBlocked || refundsBlocked || (readinessCheck?.status === 'NOT_READY')) && (
+        <View className="bg-rose-50 border border-rose-100 p-4 rounded-2xl mb-8 gap-1.5">
+          {paymentsBlocked && (
+            <Text className="text-xs font-display text-rose-700 font-bold">🔴 CRITICAL: Emergency payment creation halt is active.</Text>
+          )}
+          {payoutsBlocked && (
+            <Text className="text-xs font-display text-rose-700 font-bold">🔴 CRITICAL: Emergency seller payout release halt is active.</Text>
+          )}
+          {refundsBlocked && (
+            <Text className="text-xs font-display text-rose-700 font-bold">🔴 CRITICAL: Emergency refund execution halt is active.</Text>
+          )}
+          {readinessCheck?.status === 'NOT_READY' && (
+            <Text className="text-xs font-display text-amber-700 font-bold">⚠️ WARNING: Technical launching gates not satisfied. Check details below.</Text>
+          )}
+        </View>
+      )}
+
       {/* System Environment Safety Config */}
       <View className="bg-white border border-stone-200 p-6 rounded-3xl shadow-sm gap-4 mb-8">
         <View className="flex-row items-center gap-2">
