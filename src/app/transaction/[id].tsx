@@ -10,6 +10,7 @@ import { TransactionStatus, Dispute } from '@/types/database.types';
 import { getDisputeByTransactionId, getDisputeEvidence, getSignedEvidenceUrl, getTransactionEvents, getDisputeEvents } from '@/services/disputeService';
 import { getRatingByReviewer } from '@/services/ratingService';
 import { LeaveReviewModal } from '@/components/ui/LeaveReviewModal';
+import { activePaymentProvider } from '@/services/payment';
 
 export default function TransactionDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -29,6 +30,7 @@ export default function TransactionDetailsScreen() {
   // Rating & Review State
   const [hasRated, setHasRated] = useState<boolean>(false);
   const [showReviewModal, setShowReviewModal] = useState<boolean>(false);
+  const [payment, setPayment] = useState<any>(null);
 
   // Load transaction and user details
   const loadDetails = useCallback(async () => {
@@ -77,6 +79,14 @@ export default function TransactionDetailsScreen() {
         );
         setEvidenceUrls(urls.filter((url): url is string => url !== null));
       }
+
+      // Fetch Payment Info if any
+      const { data: pmt } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('transaction_id', tx.id)
+        .maybeSingle();
+      setPayment(pmt);
 
       // Fetch Audit Trails
       const txEvts = await getTransactionEvents(tx.id);
@@ -223,6 +233,194 @@ export default function TransactionDetailsScreen() {
     }
   };
 
+  // Trigger checkout creation
+  const handleProceedPayment = async () => {
+    if (!transaction) return;
+    try {
+      setUpdating(true);
+      const order = await activePaymentProvider.createPaymentOrder({
+        transactionId: transaction.id,
+        amount: transaction.amount,
+        currency: 'INR',
+        buyerId: transaction.buyer_id,
+        sellerId: transaction.seller_id,
+        commissionRate: 5.00
+      });
+      
+      // Prompt payment link
+      Alert.alert(
+        'Sandbox Checkout',
+        `Proceed to sandbox payment for ₹${Number(transaction.amount).toLocaleString('en-IN')}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Pay (Simulate Success)',
+            onPress: async () => {
+              // Call Edge Function to verify payment capture (which transitions status to held)
+              await activePaymentProvider.verifyPayment(order.providerOrderId);
+              await loadDetails();
+            }
+          }
+        ]
+      );
+    } catch (err: any) {
+      Alert.alert('Payment Error', err.message || 'Failed to initiate checkout.');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // Buyer Confirm Receipt Handler
+  const handleConfirmReceipt = async () => {
+    if (!transaction || !payment) return;
+    try {
+      setUpdating(true);
+      // Calls edge function to process release payout
+      const released = await activePaymentProvider.releaseSellerSettlement(payment.id);
+      if (released) {
+        Alert.alert('Success', 'Handover confirmed! Payout released to seller.');
+        await loadDetails();
+      } else {
+        Alert.alert('Error', 'Handover confirmation failed. Payout release refused by backend checks.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Confirmation failed.');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const renderPaymentPanel = () => {
+    if (!transaction || !currentUser) return null;
+
+    const isBuyer = currentUser.id === transaction.buyer_id;
+
+    if (isBuyer) {
+      // Buyer-facing interface
+      return (
+        <View className="bg-white rounded-3xl border border-stone-200 p-5 shadow-sm gap-4">
+          <Text className="text-xs font-display font-bold text-brand-text uppercase tracking-wider">
+            Secure Payment & Protection
+          </Text>
+
+          {!payment ? (
+            <View className="gap-3">
+              <Text className="text-xs font-display text-brand-muted leading-relaxed">
+                Ensure safe trading by routing your payment through Bhel Puri{"'"}s protected payment hold system.
+              </Text>
+              <View className="flex-row justify-between items-center bg-stone-50 border border-stone-100 rounded-2xl p-4">
+                <Text className="text-xs font-display text-brand-muted">Total Amount to Pay:</Text>
+                <Text className="text-base font-display font-extrabold text-brand-primary">
+                  ₹{Number(transaction.amount).toLocaleString('en-IN')}
+                </Text>
+              </View>
+              <Pressable
+                onPress={handleProceedPayment}
+                disabled={updating}
+                className="w-full h-11 bg-brand-primary rounded-xl items-center justify-center active:opacity-95"
+              >
+                <Text className="text-white font-display font-bold text-sm">Proceed to Checkout</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View className="gap-3">
+              <View className="flex-row justify-between items-center border-b border-stone-100 pb-2">
+                <Text className="text-xs font-display text-brand-muted">Payment Status:</Text>
+                <Text className="text-xs font-display font-bold text-brand-text uppercase">{payment.status}</Text>
+              </View>
+
+              {payment.status === 'created' && (
+                <Pressable
+                  onPress={handleProceedPayment}
+                  disabled={updating}
+                  className="w-full h-11 bg-brand-primary rounded-xl items-center justify-center active:opacity-95"
+                >
+                  <Text className="text-white font-display font-bold text-sm">Retry Checkout</Text>
+                </Pressable>
+              )}
+
+              {payment.status === 'held' && (
+                <View className="gap-3">
+                  <View className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 gap-1">
+                    <Text className="text-xs font-display text-emerald-800 font-bold">✓ Payment Secured & Protection Active</Text>
+                    <Text className="text-[10px] font-display text-emerald-600 leading-relaxed">
+                      Funds are currently held securely on platform hold. Confirm handover once you receive the product to release payouts.
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => {
+                      Alert.alert(
+                        'Confirm Handover',
+                        'Confirm that you have received the item in satisfactory condition? This will release the held payment to the seller.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Confirm & Release Payout', onPress: handleConfirmReceipt }
+                        ]
+                      );
+                    }}
+                    disabled={updating}
+                    className="w-full h-11 bg-emerald-600 rounded-xl items-center justify-center active:opacity-95"
+                  >
+                    <Text className="text-white font-display font-bold text-sm">Confirm Receipt & Handover</Text>
+                  </Pressable>
+                </View>
+              )}
+
+              {payment.status === 'released' && (
+                <View className="bg-stone-50 border border-stone-200 rounded-2xl p-4">
+                  <Text className="text-xs font-display text-stone-600 font-bold">✓ Payment Settled & Released to Seller</Text>
+                </View>
+              )}
+
+              {payment.status === 'refunded' && (
+                <View className="bg-rose-50 border border-rose-100 rounded-2xl p-4">
+                  <Text className="text-xs font-display text-rose-800 font-bold">✓ Funds Refunded to Buyer</Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+      );
+    } else {
+      // Seller-facing interface (display payout breakdown)
+      const commission = payment?.commission_amount || Number((transaction.amount * 0.05).toFixed(2));
+      const payable = payment?.seller_payable_amount || Number((transaction.amount - commission).toFixed(2));
+      const actualCost = payment?.provider_costs_actual || 0.00;
+      const netPayout = payment?.seller_net_payout || Number((payable - actualCost).toFixed(2));
+
+      return (
+        <View className="bg-white rounded-3xl border border-stone-200 p-5 shadow-sm gap-4">
+          <Text className="text-xs font-display font-bold text-brand-text uppercase tracking-wider">
+            Payout Breakdown
+          </Text>
+          <View className="gap-2.5">
+            <View className="flex-row justify-between">
+              <Text className="text-xs font-display text-brand-muted">Sale Amount:</Text>
+              <Text className="text-xs font-display font-bold text-brand-text">₹{Number(transaction.amount).toLocaleString('en-IN')}</Text>
+            </View>
+            <View className="flex-row justify-between">
+              <Text className="text-xs font-display text-brand-muted">Bhel Puri Commission (5%):</Text>
+              <Text className="text-xs font-display font-bold text-stone-600">-₹{commission.toLocaleString('en-IN')}</Text>
+            </View>
+            <View className="flex-row justify-between">
+              <Text className="text-xs font-display text-brand-muted">Estimated Provider Costs:</Text>
+              <Text className="text-xs font-display font-bold text-stone-600">₹{actualCost.toLocaleString('en-IN')}</Text>
+            </View>
+            <View className="flex-row justify-between border-t border-stone-100 pt-2.5">
+              <Text className="text-xs font-display text-brand-muted">Seller Net Payout:</Text>
+              <Text className="text-sm font-display font-extrabold text-emerald-600">₹{netPayout.toLocaleString('en-IN')}</Text>
+            </View>
+          </View>
+          <View className="mt-1 border-t border-stone-100 pt-3">
+            <Text className="text-[10px] font-display text-brand-muted leading-relaxed">
+              Status: {payment ? `Payment ${payment.status}` : 'Pending Buyer Checkout'}
+            </Text>
+          </View>
+        </View>
+      );
+    }
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-brand-background">
       {/* Header */}
@@ -261,6 +459,8 @@ export default function TransactionDetailsScreen() {
               </View>
             </View>
           </View>
+
+          {renderPaymentPanel()}
 
           {/* Card 2: Contact Info */}
           <View className="bg-white rounded-3xl border border-stone-200 p-5 shadow-sm gap-4">
