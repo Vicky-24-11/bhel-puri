@@ -82,6 +82,7 @@ export default function AdminLayout() {
     { label: 'Auctions', path: '/admin/auctions', icon: Gavel, show: isModerator },
     { label: 'Transactions', path: '/admin/transactions', icon: ClipboardList, show: isSupport },
     { label: 'Reports', path: '/admin/reports', icon: AlertOctagon, show: isSupport },
+    { label: 'Disputes', path: '/admin/disputes', icon: ShieldAlert, show: isSupport },
     { label: 'Audit Logs', path: '/admin/audit-logs', icon: ClipboardList, show: isSuperAdmin },
     { label: 'Admin Management', path: '/admin/admins', icon: ShieldAlert, show: isSuperAdmin },
   ].filter(l => l.show);
@@ -94,6 +95,9 @@ export default function AdminLayout() {
     return <Redirect href="/admin" />;
   }
   if (pathname.includes('/admin/transactions') && !isSupport) {
+    return <Redirect href="/admin" />;
+  }
+  if (pathname.includes('/admin/disputes') && !isSupport) {
     return <Redirect href="/admin" />;
   }
   if ((pathname.includes('/admin/listings') || pathname.includes('/admin/auctions')) && !isModerator) {

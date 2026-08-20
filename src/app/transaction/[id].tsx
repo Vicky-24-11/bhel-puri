@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, Alert, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, MessageSquare, CheckCircle2, XCircle, Clock, ShieldCheck, User } from 'lucide-react-native';
+import { ChevronLeft, MessageSquare, CheckCircle2, XCircle, Clock, ShieldCheck, User, ShieldAlert, FileText } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { getTransactionById, updateTransactionStatus, TransactionWithDetails } from '@/services/transactionService';
 import { createAuctionConversation } from '@/services/chatService';
-import { TransactionStatus } from '@/types/database.types';
+import { TransactionStatus, Dispute } from '@/types/database.types';
+import { getDisputeByTransactionId, getDisputeEvidence, getSignedEvidenceUrl, getTransactionEvents, getDisputeEvents } from '@/services/disputeService';
 
 export default function TransactionDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -17,6 +18,11 @@ export default function TransactionDetailsScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const [updating, setUpdating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Dispute & Timeline State
+  const [dispute, setDispute] = useState<Dispute | null>(null);
+  const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
+  const [timelineEvents, setTimelineEvents] = useState<any[]>([]);
 
   // Load transaction and user details
   const loadDetails = useCallback(async () => {
@@ -48,6 +54,31 @@ export default function TransactionDetailsScreen() {
       }
 
       setTransaction(tx);
+
+      // Fetch Dispute Info if any
+      const disp = await getDisputeByTransactionId(tx.id);
+      setDispute(disp);
+
+      if (disp) {
+        // Resolve Signed URLs for private evidence
+        const evidence = await getDisputeEvidence(disp.id);
+        const urls = await Promise.all(
+          evidence.map((ev) => getSignedEvidenceUrl(ev.storage_path))
+        );
+        setEvidenceUrls(urls.filter((url): url is string => url !== null));
+      }
+
+      // Fetch Audit Trails
+      const txEvts = await getTransactionEvents(tx.id);
+      const dispEvts = disp ? await getDisputeEvents(disp.id) : [];
+
+      // Combine and sort events by timestamp
+      const combined = [
+        ...txEvts.map((e) => ({ ...e, type: 'transaction' })),
+        ...dispEvts.map((e) => ({ ...e, type: 'dispute' })),
+      ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+      setTimelineEvents(combined);
     } catch (err: any) {
       console.error('Error loading transaction screen details:', err);
       setError(err.message || 'Failed to load transaction.');
@@ -84,6 +115,7 @@ export default function TransactionDetailsScreen() {
       if (updatedTx) {
         setTransaction((prev) => prev ? { ...prev, status: updatedTx.status } : null);
         Alert.alert('Success', `Transaction status updated to ${newStatus}.`);
+        loadDetails(); // Reload timeline
       }
     } catch (err: any) {
       console.error('Error transitioning status:', err);
@@ -167,6 +199,20 @@ export default function TransactionDetailsScreen() {
     }
   };
 
+  const formatEventText = (evt: any) => {
+    if (evt.type === 'transaction') {
+      if (evt.event_type === 'transaction_created') {
+        return `Transaction record generated in pending state`;
+      }
+      return `Transaction status changed from "${evt.from_status}" to "${evt.to_status}"`;
+    } else {
+      if (evt.event_type === 'dispute_created') {
+        return `Dispute opened for reason: "${evt.metadata?.reason}"`;
+      }
+      return `Support updated dispute status to "${evt.metadata?.to_status}"`;
+    }
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-brand-background">
       {/* Header */}
@@ -242,7 +288,108 @@ export default function TransactionDetailsScreen() {
             </Pressable>
           </View>
 
-          {/* Card 3: Status Transitions */}
+          {/* Card 3: Active Dispute Details Panel */}
+          {dispute ? (
+            <View className="bg-white rounded-3xl border border-red-200 p-5 shadow-sm gap-4">
+              <View className="flex-row items-center gap-2">
+                <ShieldAlert size={18} color="#E74C3C" />
+                <Text className="text-sm font-display font-bold text-brand-text">
+                  Dispute Case File
+                </Text>
+              </View>
+              <View className="gap-2 bg-stone-50 border border-stone-200 rounded-2xl p-4">
+                <View className="flex-row justify-between">
+                  <Text className="text-xs font-display text-brand-muted">Reason:</Text>
+                  <Text className="text-xs font-display font-bold text-brand-text">{dispute.reason}</Text>
+                </View>
+                <View className="flex-row justify-between">
+                  <Text className="text-xs font-display text-brand-muted">Status:</Text>
+                  <Text className="text-xs font-display font-bold text-brand-text capitalize">{dispute.status.replace('_', ' ')}</Text>
+                </View>
+                <View className="mt-2 border-t border-stone-200 pt-2">
+                  <Text className="text-xs font-display text-brand-muted">Explanation:</Text>
+                  <Text className="text-xs font-display text-brand-text mt-1 leading-relaxed">{dispute.description}</Text>
+                </View>
+                {dispute.resolution && (
+                  <View className="mt-2 border-t border-red-200 pt-2">
+                    <Text className="text-xs font-display text-red-600 font-bold">Resolution Decision:</Text>
+                    <Text className="text-xs font-display text-brand-text mt-1 leading-relaxed">{dispute.resolution}</Text>
+                    {dispute.resolution_note && (
+                      <Text className="text-xs font-display text-brand-muted mt-1 leading-relaxed">Note: {dispute.resolution_note}</Text>
+                    )}
+                  </View>
+                )}
+              </View>
+              {evidenceUrls.length > 0 && (
+                <View className="gap-2">
+                  <Text className="text-xs font-display font-bold text-brand-text">Evidence Photos:</Text>
+                  <View className="flex-row flex-wrap gap-2">
+                    {evidenceUrls.map((url, index) => (
+                      <Image
+                        key={index}
+                        source={{ uri: url }}
+                        className="w-16 h-16 rounded-xl bg-stone-100"
+                        resizeMode="cover"
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
+          ) : (
+            /* Open Dispute Button */
+            !isCompleted && !isCancelled && (
+              <View className="bg-white rounded-3xl border border-stone-200 p-5 shadow-sm gap-3">
+                <Text className="text-xs font-display font-bold text-brand-text uppercase tracking-wider">
+                  Transaction Protection
+                </Text>
+                <Text className="text-xs font-display text-brand-muted leading-relaxed">
+                  Experiencing issues with the exchange? File a dispute with support to register proof.
+                </Text>
+                <Pressable
+                  onPress={() => router.push(`/transaction/dispute?txId=${transaction.id}` as any)}
+                  className="w-full h-11 border border-red-200 bg-red-50/50 rounded-xl items-center justify-center active:bg-red-50"
+                >
+                  <Text className="text-red-600 font-display font-bold text-sm">
+                    Report an Issue / File Dispute
+                  </Text>
+                </Pressable>
+              </View>
+            )
+          )}
+
+          {/* Card 4: Audit Event Logs Timeline */}
+          {timelineEvents.length > 0 && (
+            <View className="bg-white rounded-3xl border border-stone-200 p-5 shadow-sm gap-4">
+              <Text className="text-xs font-display font-bold text-brand-text uppercase tracking-wider">
+                Transaction Audit Log
+              </Text>
+              <View className="gap-4">
+                {timelineEvents.map((evt, idx) => (
+                  <View key={evt.id} className="flex-row gap-3">
+                    <View className="items-center">
+                      <View className="w-6 h-6 rounded-full bg-brand-primary/10 items-center justify-center">
+                        <FileText size={12} color="#FF6B35" />
+                      </View>
+                      {idx !== timelineEvents.length - 1 && (
+                        <View className="w-0.5 bg-stone-200 flex-1 my-1" />
+                      )}
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-xs font-display font-bold text-brand-text">
+                        {formatEventText(evt)}
+                      </Text>
+                      <Text className="text-[10px] font-display text-brand-muted mt-0.5">
+                        {new Date(evt.created_at).toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Card 5: Status Transitions */}
           {!isCompleted && !isCancelled && (
             <View className="bg-white rounded-3xl border border-stone-200 p-5 shadow-sm gap-4">
               <Text className="text-xs font-display font-bold text-brand-text uppercase tracking-wider">
@@ -300,7 +447,7 @@ export default function TransactionDetailsScreen() {
             </View>
           )}
 
-          {/* Card 4: Safe Exchange Guidelines */}
+          {/* Card 6: Safe Exchange Guidelines */}
           <View className="bg-stone-50 border border-stone-200 rounded-3xl p-5 gap-3">
             <View className="flex-row items-center gap-2">
               <ShieldCheck size={18} color="#FF6B35" />
