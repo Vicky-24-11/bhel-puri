@@ -1,6 +1,8 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
+import { hapticLight } from '@/utils/haptics';
+
 export interface ButtonProps {
   label: string;
   onPress?: (event: any) => void;
@@ -47,9 +49,15 @@ export const Button: React.FC<ButtonProps> = ({
 
   // Size configurations
   const sizeStyles = {
-    sm: 'px-4 py-2 text-sm h-10',
-    md: 'px-6 py-3.5 text-base h-12',
-    lg: 'px-8 py-4.5 text-lg h-14',
+    sm: 'px-4 h-10',
+    md: 'px-6 h-12',
+    lg: 'px-8 h-14',
+  };
+
+  const sizeTextStyles = {
+    sm: 'text-sm font-semibold',
+    md: 'text-base font-semibold',
+    lg: 'text-lg font-bold',
   };
 
   // Disable adjustments
@@ -59,7 +67,11 @@ export const Button: React.FC<ButtonProps> = ({
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled: disabled || loading }}
-      onPress={disabled || loading ? undefined : onPress}
+      onPress={(e) => {
+        if (disabled || loading) return;
+        hapticLight();
+        onPress?.(e);
+      }}
       style={({ pressed }) => [
         pressed && !disabled && !loading ? { transform: [{ scale: 0.96 }] } : null
       ]}
@@ -80,7 +92,7 @@ export const Button: React.FC<ButtonProps> = ({
       ) : (
         <View className="flex-row items-center justify-center">
           {icon && iconPosition === 'left' && <View className="mr-2">{icon}</View>}
-          <Text className={`${textStyles[variant]} text-center`}>{label}</Text>
+          <Text className={`${textStyles[variant]} ${sizeTextStyles[size]} text-center`}>{label}</Text>
           {icon && iconPosition === 'right' && <View className="ml-2">{icon}</View>}
         </View>
       )}

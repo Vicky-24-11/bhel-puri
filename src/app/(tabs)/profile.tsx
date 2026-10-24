@@ -9,60 +9,69 @@ import {
   Star,
   User,
 } from "lucide-react-native";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Alert,
   Image,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { SwipeableTabScreen } from "@/components/common/SwipeableTabScreen";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/lib/AuthContext";
 import { signOut } from "@/services/authService";
 import { supabase } from "@/lib/supabase";
 import { getRatingsForUser } from "@/services/ratingService";
+import { hapticLight, hapticMedium } from "@/utils/haptics";
 
 export default function ProfileScreen() {
   const { user, profile } = useAuth();
   const [createdCount, setCreatedCount] = useState<number>(0);
   const [wonCount, setWonCount] = useState<number>(0);
   const [reviewsList, setReviewsList] = useState<any[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
+  const loadProfileStats = useCallback(async () => {
     if (!user) return;
+    try {
+      const [createdRes, wonRes, reviewsRes] = await Promise.all([
+        supabase
+          .from("auctions")
+          .select("id", { count: "exact", head: true })
+          .eq("seller_id", user.id),
+        supabase
+          .from("auctions")
+          .select("id", { count: "exact", head: true })
+          .eq("winner_id", user.id),
+        getRatingsForUser(user.id, undefined, 5, 0).catch(() => []),
+      ]);
 
-    // Fetch Created Auctions Count
-    supabase
-      .from('auctions')
-      .select('id', { count: 'exact', head: true })
-      .eq('seller_id', user.id)
-      .then(({ count }) => {
-        if (count !== null) setCreatedCount(count);
-      });
-
-    // Fetch Won Purchases Count
-    supabase
-      .from('auctions')
-      .select('id', { count: 'exact', head: true })
-      .eq('winner_id', user.id)
-      .then(({ count }) => {
-        if (count !== null) setWonCount(count);
-      });
-
-    // Fetch Recent Reviews Received
-    if (user.id) {
-      getRatingsForUser(user.id, undefined, 5, 0)
-        .then((data) => setReviewsList(data))
-        .catch((err) => console.error('Error fetching profile reviews:', err));
+      if (createdRes.count !== null) setCreatedCount(createdRes.count);
+      if (wonRes.count !== null) setWonCount(wonRes.count);
+      if (reviewsRes) setReviewsList(reviewsRes);
+    } catch (err) {
+      console.error("Error loading profile stats:", err);
     }
   }, [user]);
 
+  useEffect(() => {
+    loadProfileStats();
+  }, [loadProfileStats]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadProfileStats();
+    setRefreshing(false);
+  };
+
   const handleLogout = () => {
+    hapticMedium();
     const action = async () => {
       try {
         await signOut();
@@ -97,32 +106,48 @@ export default function ProfileScreen() {
     {
       label: "Edit Profile",
       icon: User,
-      action: () => router.push("/edit-profile" as any),
+      action: () => {
+        hapticLight();
+        router.push("/edit-profile" as any);
+      },
     },
     {
       label: "My Listings (Listed Auctions)",
       icon: Gavel,
-      action: () => router.push("/my-auctions" as any),
+      action: () => {
+        hapticLight();
+        router.push("/my-auctions" as any);
+      },
     },
     {
       label: "My Sales Transactions",
       icon: ShieldCheck,
-      action: () => router.push("/my-sales" as any),
+      action: () => {
+        hapticLight();
+        router.push("/my-sales" as any);
+      },
     },
     {
       label: "My Purchases (Won Auctions)",
       icon: ShieldCheck,
-      action: () => router.push("/my-purchases" as any),
+      action: () => {
+        hapticLight();
+        router.push("/my-purchases" as any);
+      },
     },
     {
       label: "Privacy & Safety",
       icon: ShieldAlert,
-      action: () => router.push("/privacy-safety" as any),
+      action: () => {
+        hapticLight();
+        router.push("/privacy-safety" as any);
+      },
     },
   ];
 
   return (
-    <SafeAreaView className="flex-1 bg-brand-background">
+    <SwipeableTabScreen currentTab="profile">
+      <SafeAreaView edges={["top", "left", "right"]} className="flex-1 bg-brand-background">
       {/* Header */}
       <View className="px-5 pt-3 pb-2 flex-row justify-between items-center border-b border-stone-200">
         <View>
@@ -136,7 +161,18 @@ export default function ProfileScreen() {
         <User size={24} color="#FF6B35" />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        className="flex-1"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={["#FF6B35"]}
+            tintColor="#FF6B35"
+          />
+        }
+      >
         <View className="w-full max-w-2xl mx-auto px-5 pt-6 pb-12">
           {/* User Hero Section Card */}
           <View className="w-full bg-white border border-stone-200 rounded-3xl p-5 mb-6 shadow-sm items-center">
@@ -339,5 +375,6 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
-  );
+  </SwipeableTabScreen>
+);
 }

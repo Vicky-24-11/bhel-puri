@@ -3,21 +3,25 @@ import { Gavel, Heart, Home, PlusCircle, User } from "lucide-react-native";
 import React from "react";
 import { Platform } from "react-native";
 
-export default function TabLayout() {
-  // const isDark = useColorScheme() === "dark";
+import { hapticSelection } from "@/utils/haptics";
 
+export default function TabLayout() {
   return (
     <Tabs
+      screenListeners={{
+        tabPress: () => {
+          hapticSelection();
+        },
+      }}
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: "#FF6B35", // Saffron Active Color
+        animation: "shift",
+        tabBarActiveTintColor: "#FF6B35",
         tabBarInactiveTintColor: "#7F8C8D",
-        // isDark ? "#888888" : "#7F8C8D",
         tabBarStyle: {
           backgroundColor: "#FFFFFF",
-          // isDark ? '#121212' : '#FFFFFF'
           borderTopColor: "#E5E7EB",
-          // isDark ? "#2D2D2D" : "#E5E7EB",
+          borderTopWidth: 1,
           height: Platform.OS === "ios" ? 88 : 64,
           paddingBottom: Platform.OS === "ios" ? 28 : 12,
           paddingTop: 10,

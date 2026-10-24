@@ -16,7 +16,7 @@ export default function VerifyScreen() {
   const [successMsg, setSuccessMsg] = useState('');
   const [isInputFocused, setIsInputFocused] = useState(true);
 
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<React.ElementRef<typeof TextInput>>(null);
 
   useEffect(() => {
     // Start cooldown timer on mount

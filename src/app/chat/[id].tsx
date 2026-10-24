@@ -15,9 +15,7 @@ import { blockUser } from '@/services/moderationService';
 import { containsContactInformation } from '@/services/contactDetectionService';
 import { Conversation, Message } from '@/types/database.types';
 import { Button } from '@/components/ui/Button';
-
-// ES6 Haptics import
-import * as Haptics from 'expo-haptics';
+import { hapticLight, hapticSelection } from '@/utils/haptics';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -59,9 +57,7 @@ export default function ChatScreen() {
   }, []);
 
   const triggerHaptic = () => {
-    if (Haptics && Haptics.impactAsync) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    }
+    hapticLight();
   };
 
   // Fetch conversation metadata
@@ -195,8 +191,9 @@ export default function ChatScreen() {
             return [...prev, joinedMsg];
           });
 
-          // If current user is not sender, mark read
+          // If current user is not sender, mark read & haptic notification
           if (joinedMsg.sender_id !== user.id && active) {
+            hapticSelection();
             markConversationMessagesRead(id, user.id);
           }
         }
@@ -285,7 +282,13 @@ export default function ChatScreen() {
     <SafeAreaView className="flex-1 bg-brand-background">
       {/* Header Panel */}
       <View className="px-5 py-3 flex-row items-center border-b border-stone-200 bg-white">
-        <Pressable onPress={() => router.back()} className="p-2 -ml-2 mr-1">
+        <Pressable
+          onPress={() => {
+            hapticLight();
+            router.back();
+          }}
+          className="p-2 -ml-2 mr-1"
+        >
           <ArrowLeft size={20} color="#1A1A1A" />
         </Pressable>
 
@@ -379,7 +382,7 @@ export default function ChatScreen() {
               <View className="py-4 items-center">
                 <ActivityIndicator size="small" color="#FF6B35" />
               </View>
-            ) : null
+            ) : undefined
           }
           ListEmptyComponent={
             <View className="py-12 px-6 items-center">

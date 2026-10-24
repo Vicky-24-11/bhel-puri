@@ -25,6 +25,9 @@ module.exports = {
       fontFamily: {
         display: ["Spline Sans", "Inter", "sans-serif"],
         mono: ["Courier New", "monospace"],
+      },
+      spacing: {
+        '4.5': '1.125rem',
       }
     },
   },

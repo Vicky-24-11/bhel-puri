@@ -9,7 +9,9 @@ import { getCategories } from '@/services/categoryService';
 import { getAuctions, FetchAuctionsParams } from '@/services/auctionService';
 import { Category, Auction } from '@/types/database.types';
 import { AuctionCard } from '@/components/ui/AuctionCard';
+import { SwipeableTabScreen } from '@/components/common/SwipeableTabScreen';
 import { finalizeExpiredAuctions } from '@/services/auctionFinalizationService';
+import { hapticLight, hapticSelection } from '@/utils/haptics';
 
 export default function ExploreScreen() {
   const params = useLocalSearchParams<{
@@ -197,6 +199,7 @@ export default function ExploreScreen() {
   };
 
   const handleClearAll = () => {
+    hapticLight();
     setSearchQuery('');
     setSelectedCategory(null);
     setSelectedStatus('all');
@@ -239,15 +242,24 @@ export default function ExploreScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-brand-background">
+    <SwipeableTabScreen currentTab="explore">
+      <SafeAreaView edges={["top", "left", "right"]} className="flex-1 bg-brand-background">
       {/* 1. Header Bar */}
       <View className="px-5 pt-3 pb-2 flex-row justify-between items-center border-b border-stone-200">
         <View>
           <Text className="text-2xl font-display font-extrabold text-brand-text">
-            Explore Auctions
+            {auctionTypeFilter === 'reverse'
+              ? 'Buy Requests'
+              : auctionTypeFilter === 'forward'
+              ? 'Live Auctions'
+              : 'Explore Marketplace'}
           </Text>
           <Text className="text-xs font-display text-brand-muted mt-0.5">
-            Discover active live bidding wars
+            {auctionTypeFilter === 'reverse'
+              ? 'Find what buyers want and submit your best offer'
+              : auctionTypeFilter === 'forward'
+              ? 'Bid and win verified items across India'
+              : 'Discover live auctions & buyer requests across India'}
           </Text>
         </View>
         <Gavel size={24} color="#FF6B35" />
@@ -288,7 +300,10 @@ export default function ExploreScreen() {
                 />
               </View>
               <Pressable
-                onPress={() => setShowFiltersModal(!showFiltersModal)}
+                onPress={() => {
+                  hapticLight();
+                  setShowFiltersModal(!showFiltersModal);
+                }}
                 style={{
                   backgroundColor: showFiltersModal ? '#FF6B35' : '#FFFFFF',
                   borderColor: showFiltersModal ? '#FF6B35' : '#E5E7EB',
@@ -302,7 +317,10 @@ export default function ExploreScreen() {
             {/* Mode Switcher: All | 🔄 Buy Requests (Reverse) | 🔨 Auctions (Forward) */}
             <View className="flex-row px-5 mb-3.5 gap-2">
               <Pressable
-                onPress={() => setAuctionTypeFilter('all')}
+                onPress={() => {
+                  hapticSelection();
+                  setAuctionTypeFilter('all');
+                }}
                 className={`py-2 px-3.5 rounded-xl border items-center justify-center ${
                   auctionTypeFilter === 'all'
                     ? 'bg-brand-text border-brand-text shadow-sm'
@@ -315,7 +333,10 @@ export default function ExploreScreen() {
               </Pressable>
 
               <Pressable
-                onPress={() => setAuctionTypeFilter('reverse')}
+                onPress={() => {
+                  hapticSelection();
+                  setAuctionTypeFilter('reverse');
+                }}
                 className={`flex-1 py-2 px-3 rounded-xl border items-center justify-center flex-row gap-1.5 ${
                   auctionTypeFilter === 'reverse'
                     ? 'bg-amber-600 border-amber-600 shadow-sm'
@@ -328,7 +349,10 @@ export default function ExploreScreen() {
               </Pressable>
 
               <Pressable
-                onPress={() => setAuctionTypeFilter('forward')}
+                onPress={() => {
+                  hapticSelection();
+                  setAuctionTypeFilter('forward');
+                }}
                 className={`flex-1 py-2 px-3 rounded-xl border items-center justify-center flex-row gap-1.5 ${
                   auctionTypeFilter === 'forward'
                     ? 'bg-brand-primary border-brand-primary shadow-sm'
@@ -349,7 +373,10 @@ export default function ExploreScreen() {
                 contentContainerStyle={{ paddingHorizontal: 20 }}
               >
                 <Pressable
-                  onPress={() => setSelectedCategory(null)}
+                  onPress={() => {
+                    hapticSelection();
+                    setSelectedCategory(null);
+                  }}
                   className={`flex-row items-center px-4 py-2 mr-3 rounded-full border shadow-sm ${
                     selectedCategory === null
                       ? 'bg-brand-primary border-brand-primary'
@@ -367,7 +394,10 @@ export default function ExploreScreen() {
                   return (
                     <Pressable
                       key={cat.id}
-                      onPress={() => setSelectedCategory(cat.slug)}
+                      onPress={() => {
+                        hapticSelection();
+                        setSelectedCategory(cat.slug);
+                      }}
                       className={`flex-row items-center px-4 py-2 mr-3 rounded-full border shadow-sm ${
                         isActive ? 'bg-brand-primary border-brand-primary' : 'bg-white border-stone-200'
                       }`}
@@ -382,30 +412,6 @@ export default function ExploreScreen() {
                   );
                 })}
               </ScrollView>
-            </View>
-
-            {/* Auction Type Filter Row */}
-            <View className="px-5 mb-3 flex-row gap-2">
-              {([
-                { label: 'All Requests', value: 'all' },
-                { label: '🔨 Sell Auctions', value: 'forward' },
-                { label: '🔄 Buy Requests', value: 'reverse' },
-              ] as const).map((item) => {
-                const isActive = auctionTypeFilter === item.value;
-                return (
-                  <Pressable
-                    key={item.value}
-                    onPress={() => setAuctionTypeFilter(item.value)}
-                    className={`flex-1 py-2.5 rounded-2xl border items-center justify-center shadow-sm ${
-                      isActive ? 'bg-brand-primary border-brand-primary' : 'bg-white border-stone-200'
-                    }`}
-                  >
-                    <Text className={`text-xs font-display font-bold ${isActive ? 'text-white' : 'text-brand-text'}`}>
-                      {item.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
             </View>
 
             {/* Detailed Filters Modal / Row Panel */}
@@ -427,7 +433,10 @@ export default function ExploreScreen() {
                       return (
                         <Pressable
                           key={item.value}
-                          onPress={() => setSelectedStatus(item.value)}
+                          onPress={() => {
+                            hapticSelection();
+                            setSelectedStatus(item.value);
+                          }}
                           className={`px-3 py-2.5 rounded-xl border items-center ${
                             isActive ? 'bg-brand-text border-brand-text' : 'bg-stone-50 border-stone-200'
                           }`}
@@ -459,7 +468,10 @@ export default function ExploreScreen() {
                       return (
                         <Pressable
                           key={item.value}
-                          onPress={() => setSortBy(item.value)}
+                          onPress={() => {
+                            hapticSelection();
+                            setSortBy(item.value);
+                          }}
                           className={`flex-row items-center px-3.5 py-2 rounded-xl border gap-1.5 ${
                             isActive ? 'bg-brand-primary/10 border-brand-primary' : 'bg-stone-50 border-stone-200'
                           }`}
@@ -522,13 +534,19 @@ export default function ExploreScreen() {
                 <Gavel size={32} color="#FF6B35" />
               </View>
               <Text className="text-lg font-display font-bold text-brand-text mb-1">
-                No Auctions Found
+                {auctionTypeFilter === 'reverse'
+                  ? 'No Buy Requests Found'
+                  : auctionTypeFilter === 'forward'
+                  ? 'No Live Auctions Found'
+                  : 'No Listings Found'}
               </Text>
               <Text className="text-sm font-display text-brand-muted text-center max-w-xs px-2 leading-relaxed">
-                {"We couldn't find any listings matching your search criteria. Try removing filters or searching other keywords."}
+                {auctionTypeFilter === 'reverse'
+                  ? "We couldn't find any buy requests matching your criteria. Be the first to post a request or adjust your filters."
+                  : "We couldn't find any listings matching your search criteria. Try removing filters or searching other keywords."}
               </Text>
             </View>
-          ) : null
+          ) : undefined
         }
         ListFooterComponent={
           loading ? (
@@ -539,13 +557,14 @@ export default function ExploreScreen() {
             <View className="py-6 items-center">
               <ActivityIndicator size="small" color="#FF6B35" />
             </View>
-          ) : null
+          ) : undefined
         }
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.4}
         refreshing={refreshing}
         onRefresh={handleRefresh}
       />
-    </SafeAreaView>
+      </SafeAreaView>
+    </SwipeableTabScreen>
   );
 }

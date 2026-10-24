@@ -104,7 +104,7 @@ export default function ReportHistoryScreen() {
               <View className="py-4 items-center">
                 <ActivityIndicator size="small" color="#FF6B35" />
               </View>
-            ) : null
+            ) : undefined
           }
           ListEmptyComponent={
             <View className="flex-1 justify-center items-center py-16 px-6">

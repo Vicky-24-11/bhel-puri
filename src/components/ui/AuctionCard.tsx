@@ -10,6 +10,7 @@ import { CountdownTimer } from './CountdownTimer';
 import { Badge } from './Badge';
 import { useAuth } from '@/lib/AuthContext';
 import { addToWatchlist, removeFromWatchlist, getWatchlist } from '@/services/auctionService';
+import { hapticLight, hapticMedium } from '@/utils/haptics';
 
 export interface AuctionCardProps {
   id: string;
@@ -94,6 +95,7 @@ export const AuctionCard: React.FC<AuctionCardProps> = ({
 
     const nextState = !isWatched;
     setIsWatched(nextState);
+    hapticMedium();
 
     // Bounce spring animation
     Animated.sequence([
@@ -115,6 +117,7 @@ export const AuctionCard: React.FC<AuctionCardProps> = ({
   };
 
   const handleCardPress = () => {
+    hapticLight();
     router.push(`/auction/${id}` as any);
   };
 

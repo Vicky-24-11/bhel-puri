@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { Dispute, DisputeEvidence, DisputeEvent, TransactionEvent } from '../types/database.types';
 import { Platform } from 'react-native';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 
 // Helper to convert URIs to Blobs/ArrayBuffers cross-platform
