@@ -63,9 +63,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         setAuthState('PROFILE_INCOMPLETE');
       }
-    } catch (err) {
-      console.error('Error fetching user profile:', err);
-      setAuthState('AUTH_ERROR');
+    } catch (err: any) {
+      console.error('Error fetching user profile:', err?.message || err);
+      // Gracefully fallback to PROFILE_INCOMPLETE instead of locking the user in AUTH_ERROR
+      setProfile(null);
+      setAuthState('PROFILE_INCOMPLETE');
     }
   };
 

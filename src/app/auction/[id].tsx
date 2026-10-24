@@ -22,8 +22,13 @@ import { Input } from '@/components/ui/Input';
 import { PriceDisplay } from '@/components/ui/PriceDisplay';
 import { Badge } from '@/components/ui/Badge';
 import { AuctionParticipant } from '@/types/database.types';
-
-import * as Haptics from 'expo-haptics';
+import {
+  hapticError,
+  hapticLight,
+  hapticMedium,
+  hapticSelection,
+  hapticSuccess,
+} from '@/utils/haptics';
 
 export default function AuctionDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -166,12 +171,10 @@ export default function AuctionDetailsScreen() {
   }, [currentStatus, auction?.winner_id, id]);
 
   const triggerHaptic = (type: 'success' | 'error') => {
-    if (Haptics && Haptics.notificationAsync) {
-      const feedbackType =
-        type === 'success'
-          ? Haptics.NotificationFeedbackType.Success
-          : Haptics.NotificationFeedbackType.Error;
-      Haptics.notificationAsync(feedbackType).catch(() => {});
+    if (type === 'success') {
+      hapticSuccess();
+    } else {
+      hapticError();
     }
   };
 
@@ -182,6 +185,7 @@ export default function AuctionDetailsScreen() {
     }
     const nextState = !isWatched;
     setIsWatched(nextState);
+    hapticMedium();
     try {
       if (nextState) {
         await addToWatchlist(user.id, auction.id);
@@ -537,20 +541,40 @@ export default function AuctionDetailsScreen() {
       )}
       {/* Navigation Header */}
       <View className="px-5 py-3 flex-row items-center justify-between border-b border-stone-200 bg-white">
-        <Pressable onPress={() => router.back()} className="p-2 -ml-2">
+        <Pressable
+          onPress={() => {
+            hapticLight();
+            router.back();
+          }}
+          className="p-2 -ml-2"
+        >
           <ArrowLeft size={20} color="#1A1A1A" />
         </Pressable>
         
         <Text className="font-display font-extrabold text-brand-text text-base">
-          {currentStatus === 'live' ? '⚡ Live Auction' : 'Auction Details'}
+          {currentStatus === 'live'
+            ? (isReverse ? '🔄 Live Buy Request' : '⚡ Live Auction')
+            : (isReverse ? 'Buy Request Details' : 'Auction Details')}
         </Text>
 
         {isSeller ? (
-          <Pressable onPress={() => setShowManageModal(true)} className="p-2 -mr-2">
+          <Pressable
+            onPress={() => {
+              hapticLight();
+              setShowManageModal(true);
+            }}
+            className="p-2 -mr-2"
+          >
             <Settings size={20} color="#FF6B35" />
           </Pressable>
         ) : (
-          <Pressable onPress={() => setShowSafetyMenu(true)} className="p-2 -mr-2">
+          <Pressable
+            onPress={() => {
+              hapticLight();
+              setShowSafetyMenu(true);
+            }}
+            className="p-2 -mr-2"
+          >
             <MoreVertical size={20} color="#1A1A1A" />
           </Pressable>
         )}
@@ -568,7 +592,11 @@ export default function AuctionDetailsScreen() {
                 onScroll={(e) => {
                   const slideSize = e.nativeEvent.layoutMeasurement.width;
                   const offset = e.nativeEvent.contentOffset.x;
-                  setActiveImageIndex(Math.floor(offset / slideSize));
+                  const newIndex = Math.round(offset / slideSize);
+                  if (newIndex !== activeImageIndex && newIndex >= 0 && newIndex < auction.images.length) {
+                    setActiveImageIndex(newIndex);
+                    hapticSelection();
+                  }
                 }}
                 scrollEventThrottle={16}
                 className="w-full h-full"
@@ -764,7 +792,10 @@ export default function AuctionDetailsScreen() {
                     {bidSuggestions.map((val, idx) => (
                       <Pressable
                         key={idx}
-                        onPress={() => handlePlaceBidAmount(val)}
+                        onPress={() => {
+                          hapticLight();
+                          handlePlaceBidAmount(val);
+                        }}
                         disabled={placingBid || !isOnline || !isConnected}
                         className="flex-1 items-center justify-center py-2.5 bg-stone-50 border border-stone-200 rounded-xl active:bg-brand-primary/10 active:border-brand-primary"
                       >

@@ -22,6 +22,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { SwipeableTabScreen } from "@/components/common/SwipeableTabScreen";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -29,6 +30,13 @@ import { useAuth } from "@/lib/AuthContext";
 import { createAuction } from "@/services/auctionService";
 import { getCategories } from "@/services/categoryService";
 import { Category } from "@/types/database.types";
+import {
+  hapticError,
+  hapticLight,
+  hapticMedium,
+  hapticSelection,
+  hapticSuccess,
+} from "@/utils/haptics";
 
 export default function SellScreen() {
   const { user, profile } = useAuth();
@@ -222,6 +230,7 @@ export default function SellScreen() {
           ? "Your buy request has been published and is now live!"
           : "Your auction listing has been published and is now live!",
       );
+      hapticSuccess();
 
       // Reset form variables
       setAuctionType("forward");
@@ -242,6 +251,7 @@ export default function SellScreen() {
       // Redirect user to explore dashboard
       router.replace("/explore" as any);
     } catch (err: any) {
+      hapticError();
       Alert.alert(
         "Publishing Failed",
         err.message || "Something went wrong. Please try again.",
@@ -270,7 +280,8 @@ export default function SellScreen() {
   }
 
   return (
-    <SafeAreaView edges={["top", "left", "right"]} className="flex-1 bg-brand-background">
+    <SwipeableTabScreen currentTab="sell">
+      <SafeAreaView edges={["top", "left", "right"]} className="flex-1 bg-brand-background">
       {/* Dynamic Header */}
       <View className="px-5 pt-3 pb-2 flex-row justify-between items-center border-b border-stone-200 bg-white">
         <View>
@@ -322,7 +333,10 @@ export default function SellScreen() {
               <View className="gap-4 mb-4">
                 {/* Option 1: Buy Request (Reverse Auction) - Primary Hero Choice */}
                 <Pressable
-                  onPress={() => setAuctionType("reverse")}
+                  onPress={() => {
+                    hapticSelection();
+                    setAuctionType("reverse");
+                  }}
                   style={
                     auctionType === "reverse"
                       ? {
@@ -358,7 +372,10 @@ export default function SellScreen() {
 
                 {/* Option 2: Sell Something (Forward Auction) */}
                 <Pressable
-                  onPress={() => setAuctionType("forward")}
+                  onPress={() => {
+                    hapticSelection();
+                    setAuctionType("forward");
+                  }}
                   style={
                     auctionType === "forward"
                       ? {
@@ -388,7 +405,10 @@ export default function SellScreen() {
 
               <Button
                 label="Continue"
-                onPress={() => setStep(2)}
+                onPress={() => {
+                  hapticMedium();
+                  setStep(2);
+                }}
                 icon={<ChevronRight size={18} color="#FFFFFF" />}
                 iconPosition="right"
               />
@@ -909,5 +929,6 @@ export default function SellScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
-  );
+  </SwipeableTabScreen>
+);
 }

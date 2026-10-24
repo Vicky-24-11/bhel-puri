@@ -4,6 +4,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter, useSegments }
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from '../lib/AuthContext';
 import { LoadingState } from '../components/ui/LoadingState';
 import { initErrorMonitoring } from '../services/errorMonitoringService';
@@ -23,11 +24,13 @@ let isSplashHidden = false;
 
 export default function RootLayout() {
   return (
-    <ErrorBoundary>
-      <AuthProvider>
-        <InnerLayout />
-      </AuthProvider>
-    </ErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ErrorBoundary>
+        <AuthProvider>
+          <InnerLayout />
+        </AuthProvider>
+      </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 }
 

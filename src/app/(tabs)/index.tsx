@@ -10,11 +10,12 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -22,11 +23,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { SwipeableTabScreen } from "@/components/common/SwipeableTabScreen";
 import { AuctionCard } from "@/components/ui/AuctionCard";
 import { useAuth } from "@/lib/AuthContext";
 import { getAuctions } from "@/services/auctionService";
 import { getCategories } from "@/services/categoryService";
 import { Auction, Category } from "@/types/database.types";
+import { hapticLight, hapticMedium, hapticSelection } from "@/utils/haptics";
 
 export default function HomeScreen() {
   const { profile } = useAuth();
@@ -40,49 +43,47 @@ export default function HomeScreen() {
   const [reverseAuctions, setReverseAuctions] = useState<Auction[]>([]);
   const [recentAuctions, setRecentAuctions] = useState<Auction[]>([]);
   const [endingSoonAuctions, setEndingSoonAuctions] = useState<Auction[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [selectedLocation] = useState("Mumbai, MH");
 
-  useEffect(() => {
-    let active = true;
+  const fetchHomeData = useCallback(async () => {
+    try {
+      const [cats, reverse, recent, ending] = await Promise.all([
+        getCategories(),
+        getAuctions({
+          status: "live",
+          auctionType: "reverse",
+          sortBy: "newest",
+          limit: 6,
+        }),
+        getAuctions({ status: "live", sortBy: "newest", limit: 6 }),
+        getAuctions({ status: "live", sortBy: "ending_soon", limit: 6 }),
+      ]);
 
-    const fetchHomeData = async () => {
-      try {
-        const [cats, reverse, recent, ending] = await Promise.all([
-          getCategories(),
-          getAuctions({
-            status: "live",
-            auctionType: "reverse",
-            sortBy: "newest",
-            limit: 6,
-          }),
-          getAuctions({ status: "live", sortBy: "newest", limit: 6 }),
-          getAuctions({ status: "live", sortBy: "ending_soon", limit: 6 }),
-        ]);
-
-        if (!active) return;
-
-        setCategories(cats);
-        setReverseAuctions(reverse);
-        setRecentAuctions(recent);
-        setEndingSoonAuctions(ending);
-      } catch (err) {
-        console.error("Error loading home data:", err);
-      } finally {
-        if (active) {
-          setLoadingCategories(false);
-        }
-      }
-    };
-
-    fetchHomeData();
-
-    return () => {
-      active = false;
-    };
+      setCategories(cats);
+      setReverseAuctions(reverse);
+      setRecentAuctions(recent);
+      setEndingSoonAuctions(ending);
+    } catch (err) {
+      console.error("Error loading home data:", err);
+    } finally {
+      setLoadingCategories(false);
+    }
   }, []);
 
+  useEffect(() => {
+    fetchHomeData();
+  }, [fetchHomeData]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchHomeData();
+    setRefreshing(false);
+  };
+
   const handleCategoryPress = (slug: string | null) => {
+    hapticSelection();
     setSelectedCategory(slug);
     // Push filters state directly to the Explore tab screen
     router.navigate({
@@ -114,7 +115,8 @@ export default function HomeScreen() {
   const displayName = profile?.full_name || profile?.username || "Guest";
 
   return (
-    <SafeAreaView edges={["top", "left", "right"]} className="flex-1 bg-brand-background">
+    <SwipeableTabScreen currentTab="index">
+      <SafeAreaView edges={["top", "left", "right"]} className="flex-1 bg-brand-background">
       {/* 1. Header Area */}
       <View className="px-5 pt-3 pb-2 flex-row justify-between items-center">
         <View>
@@ -129,13 +131,19 @@ export default function HomeScreen() {
         {/* Small Profile Avatar & Notifications */}
         <View className="flex-row items-center gap-4">
           <Pressable
-            onPress={() => router.navigate("/activity")}
+            onPress={() => {
+              hapticLight();
+              router.navigate("/activity");
+            }}
             className="w-10 h-10 items-center justify-center bg-white border border-stone-200 rounded-full shadow-sm active:bg-stone-50"
           >
             <Bell size={20} color="#1A1A1A" />
           </Pressable>
           <Pressable
-            onPress={() => router.navigate("/profile")}
+            onPress={() => {
+              hapticLight();
+              router.navigate("/profile");
+            }}
             style={{ borderColor: "rgba(255, 107, 53, 0.2)" }}
             className="w-10 h-10 rounded-full bg-brand-secondary items-center justify-center border shadow-sm active:opacity-90 overflow-hidden"
           >
@@ -153,7 +161,18 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        className="flex-1"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={["#FF6B35"]}
+            tintColor="#FF6B35"
+          />
+        }
+      >
         <View className="w-full max-w-5xl mx-auto px-5 pb-6">
           {/* 2. Personalised Greeting */}
           <View className="mb-4 mt-5">
@@ -218,7 +237,10 @@ export default function HomeScreen() {
             </Text>
             <View className="flex-row items-center gap-3">
               <Pressable
-                onPress={() => router.navigate("/sell")}
+                onPress={() => {
+                  hapticMedium();
+                  router.navigate("/sell");
+                }}
                 className="bg-white px-4 py-2.5 rounded-full flex-row items-center gap-2 shadow-sm active:opacity-90"
               >
                 <RefreshCw size={14} color="#FF6B35" />
@@ -227,12 +249,13 @@ export default function HomeScreen() {
                 </Text>
               </Pressable>
               <Pressable
-                onPress={() =>
+                onPress={() => {
+                  hapticLight();
                   router.navigate({
                     pathname: "/explore",
                     params: { type: "reverse" },
-                  } as any)
-                }
+                  } as any);
+                }}
                 className="bg-white/20 px-3.5 py-2.5 rounded-full flex-row items-center gap-1.5 active:bg-white/30"
               >
                 <Text className="text-xs font-display font-bold text-white">
@@ -348,12 +371,13 @@ export default function HomeScreen() {
                       </View>
                     </View>
                     <Pressable
-                      onPress={() =>
+                      onPress={() => {
+                        hapticLight();
                         router.navigate({
                           pathname: "/explore",
                           params: { type: "reverse" },
-                        } as any)
-                      }
+                        } as any);
+                      }}
                       className="flex-row items-center gap-1 px-3 py-1.5 rounded-full bg-brand-primary/10 active:bg-brand-primary/20"
                     >
                       <Text className="text-xs font-display font-bold text-brand-primary">
@@ -462,5 +486,6 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
-  );
+  </SwipeableTabScreen>
+);
 }

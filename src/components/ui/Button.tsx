@@ -1,6 +1,8 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
+import { hapticLight } from '@/utils/haptics';
+
 export interface ButtonProps {
   label: string;
   onPress?: (event: any) => void;
@@ -65,7 +67,11 @@ export const Button: React.FC<ButtonProps> = ({
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled: disabled || loading }}
-      onPress={disabled || loading ? undefined : onPress}
+      onPress={(e) => {
+        if (disabled || loading) return;
+        hapticLight();
+        onPress?.(e);
+      }}
       style={({ pressed }) => [
         pressed && !disabled && !loading ? { transform: [{ scale: 0.96 }] } : null
       ]}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, FlatList } from 'react-native';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, FlatList, RefreshControl, useWindowDimensions, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Heart, Bell, MessageSquare, ArrowUpRight, Award, CheckCircle2 } from 'lucide-react-native';
 import { Image } from 'expo-image';
@@ -14,6 +14,7 @@ import { getConversations } from '@/services/chatService';
 import { getNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotificationsCount } from '@/services/notificationService';
 import { Auction, Category, Conversation, Notification } from '@/types/database.types';
 import { AuctionCard } from '@/components/ui/AuctionCard';
+import { hapticSelection } from '@/utils/haptics';
 
 export default function ActivityScreen() {
   const { user } = useAuth();
@@ -33,6 +34,26 @@ export default function ActivityScreen() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loadingAlerts, setLoadingAlerts] = useState(true);
   const [alertsUnreadTotal, setAlertsUnreadTotal] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const { width: screenWidth } = useWindowDimensions();
+  const pagerRef = useRef<React.ElementRef<typeof ScrollView>>(null);
+
+  const handleSegmentPress = (segment: 'watchlist' | 'inbox' | 'alerts', index: number) => {
+    setActiveSegment(segment);
+    hapticSelection();
+    pagerRef.current?.scrollTo({ x: index * screenWidth, animated: true });
+  };
+
+  const handleMomentumScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const pageIndex = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+    const segments: ('watchlist' | 'inbox' | 'alerts')[] = ['watchlist', 'inbox', 'alerts'];
+    const newSegment = segments[pageIndex] || 'watchlist';
+    if (newSegment !== activeSegment) {
+      setActiveSegment(newSegment);
+      hapticSelection();
+    }
+  };
 
   // Realtime channel references
   const msgChannelRef = useRef<RealtimeChannel | null>(null);
@@ -42,7 +63,6 @@ export default function ActivityScreen() {
   const loadWatchlist = useCallback(async () => {
     if (!user) return;
     try {
-      setLoadingWatchlist(true);
       const [list, cats] = await Promise.all([getWatchlist(user.id), getCategories()]);
       setWatchlistItems(list);
       setCategories(cats);
@@ -57,7 +77,6 @@ export default function ActivityScreen() {
   const loadInbox = useCallback(async () => {
     if (!user) return;
     try {
-      if (loadingInbox) setLoadingInbox(true);
       const data = await getConversations(user.id);
       setConversations(data as any);
       const total = data.reduce((sum, item) => sum + (item.unread_count || 0), 0);
@@ -67,13 +86,12 @@ export default function ActivityScreen() {
     } finally {
       setLoadingInbox(false);
     }
-  }, [user, loadingInbox]);
+  }, [user]);
 
   // Load Alerts (Notifications)
   const loadAlerts = useCallback(async () => {
     if (!user) return;
     try {
-      if (loadingAlerts) setLoadingAlerts(true);
       const data = await getNotifications();
       setNotifications(data);
       const unreadCount = await getUnreadNotificationsCount(user.id);
@@ -83,7 +101,13 @@ export default function ActivityScreen() {
     } finally {
       setLoadingAlerts(false);
     }
-  }, [user, loadingAlerts]);
+  }, [user]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([loadWatchlist(), loadInbox(), loadAlerts()]);
+    setRefreshing(false);
+  };
 
   // Initial Loaders
   useEffect(() => {
@@ -219,7 +243,7 @@ export default function ActivityScreen() {
         <View className="flex-row bg-stone-100 rounded-xl p-1 mb-1">
           {/* Watchlist Tab */}
           <Pressable
-            onPress={() => setActiveSegment('watchlist')}
+            onPress={() => handleSegmentPress('watchlist', 0)}
             style={
               activeSegment === 'watchlist'
                 ? {
@@ -242,7 +266,7 @@ export default function ActivityScreen() {
 
           {/* Inbox Tab */}
           <Pressable
-            onPress={() => setActiveSegment('inbox')}
+            onPress={() => handleSegmentPress('inbox', 1)}
             style={
               activeSegment === 'inbox'
                 ? {
@@ -272,7 +296,7 @@ export default function ActivityScreen() {
 
           {/* Alerts Tab */}
           <Pressable
-            onPress={() => setActiveSegment('alerts')}
+            onPress={() => handleSegmentPress('alerts', 2)}
             style={
               activeSegment === 'alerts'
                 ? {
@@ -302,201 +326,238 @@ export default function ActivityScreen() {
         </View>
       </View>
 
-      {/* Segment Views */}
-      {activeSegment === 'watchlist' && (
-        loadingWatchlist ? (
-          <View className="flex-1 items-center justify-center">
-            <ActivityIndicator size="small" color="#FF6B35" />
-          </View>
-        ) : watchlistItems.length === 0 ? (
-          <ScrollView className="flex-1 pt-12 px-6">
-            <View className="items-center py-16 bg-white rounded-3xl border border-stone-200 shadow-sm px-6">
-              <View className="w-14 h-14 rounded-full bg-brand-primary/10 items-center justify-center mb-4">
-                <Heart size={24} color="#FF6B35" />
-              </View>
-              <Text className="text-base font-display font-bold text-brand-text mb-1 text-center">
-                Your Watchlist is Empty
-              </Text>
-              <Text className="text-xs font-display text-brand-muted text-center max-w-xs leading-relaxed">
-                {"Save auctions you're interested in by tapping the heart icon on any listing card."}
-              </Text>
+      {/* Swipeable Segment Pager */}
+      <ScrollView
+        ref={pagerRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={handleMomentumScrollEnd}
+        scrollEventThrottle={16}
+        className="flex-1"
+      >
+        {/* Page 0: Watchlist */}
+        <View style={{ width: screenWidth }} className="flex-1">
+          {loadingWatchlist ? (
+            <View className="flex-1 items-center justify-center">
+              <ActivityIndicator size="small" color="#FF6B35" />
             </View>
-          </ScrollView>
-        ) : (
-          <FlatList
-            data={watchlistItems}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{ padding: 20 }}
-            renderItem={({ item }) => (
-              <AuctionCard
-                id={item.id}
-                title={item.title}
-                current_price={item.current_price}
-                ends_at={item.ends_at}
-                starts_at={item.starts_at}
-                category_name={categories.find((c) => c.id === item.category_id)?.name}
-                status={item.status}
-                bid_count={0}
-                primary_image_url={item.primary_image_url}
-              />
-            )}
-          />
-        )
-      )}
-
-      {activeSegment === 'inbox' && (
-        loadingInbox ? (
-          <View className="flex-1 items-center justify-center">
-            <ActivityIndicator size="small" color="#FF6B35" />
-          </View>
-        ) : conversations.length === 0 ? (
-          <ScrollView className="flex-1 pt-12 px-6">
-            <View className="items-center py-16 bg-white rounded-3xl border border-stone-200 shadow-sm px-6">
-              <View className="w-14 h-14 rounded-full bg-brand-primary/10 items-center justify-center mb-4">
-                <MessageSquare size={24} color="#FF6B35" />
-              </View>
-              <Text className="text-base font-display font-bold text-brand-text mb-1 text-center">
-                No Conversations Yet
-              </Text>
-              <Text className="text-xs font-display text-brand-muted text-center max-w-xs leading-relaxed">
-                Once an auction you participate in ends, you can chat with the seller or winner directly here.
-              </Text>
-            </View>
-          </ScrollView>
-        ) : (
-          <FlatList
-            data={conversations}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{ padding: 20 }}
-            renderItem={({ item }) => {
-              const otherUser = user?.id === item.seller_id ? item.winner : item.seller;
-              const productTitle = item.auction?.title || 'Bhel Puri Item';
-              const latestMsgText = item.last_message?.content || 'Conversation started';
-              const lastMsgTime = item.last_message ? formatLastMessageTime(item.last_message.created_at) : '';
-              const imgUrl = item.auction?.primary_image_url;
-
-              return (
-                <Pressable
-                  onPress={() => router.push(`/chat/${item.id}`)}
-                  className="flex-row items-center bg-white border border-stone-200 rounded-3xl p-4 mb-3 active:bg-stone-50 shadow-sm"
-                >
-                  {/* Product Image Context badge */}
-                  <View className="w-12 h-12 rounded-2xl bg-stone-100 overflow-hidden mr-3.5 relative">
-                    {imgUrl ? (
-                      <Image source={{ uri: getAuctionImageUrl(imgUrl) }} className="w-full h-full" contentFit="cover" />
-                    ) : (
-                      <View className="w-full h-full items-center justify-center bg-stone-200">
-                        <MessageSquare size={16} color="#7F8C8D" />
-                      </View>
-                    )}
-                  </View>
-
-                  <View className="flex-1">
-                    <View className="flex-row justify-between items-baseline mb-0.5">
-                      <Text className="font-display font-extrabold text-brand-text text-sm" numberOfLines={1}>
-                        @{otherUser?.username || 'User'}
-                      </Text>
-                      {lastMsgTime ? (
-                        <Text className="text-[10px] font-display text-brand-muted font-medium">
-                          {lastMsgTime}
-                        </Text>
-                      ) : null}
-                    </View>
-                    
-                    <Text className="text-[10px] font-display font-semibold text-brand-primary mb-1 uppercase tracking-wider">
-                      {productTitle}
-                    </Text>
-
-                    <Text className={`text-xs font-display ${item.unread_count > 0 ? 'font-bold text-brand-text' : 'text-brand-muted'}`} numberOfLines={1}>
-                      {latestMsgText}
-                    </Text>
-                  </View>
-
-                  {item.unread_count > 0 && (
-                    <View className="w-5 h-5 rounded-full bg-brand-primary items-center justify-center ml-2">
-                      <Text className="text-[10px] font-display font-bold text-white">
-                        {item.unread_count}
-                      </Text>
-                    </View>
-                  )}
-                </Pressable>
-              );
-            }}
-          />
-        )
-      )}
-
-      {activeSegment === 'alerts' && (
-        loadingAlerts ? (
-          <View className="flex-1 items-center justify-center">
-            <ActivityIndicator size="small" color="#FF6B35" />
-          </View>
-        ) : notifications.length === 0 ? (
-          <ScrollView className="flex-1 pt-12 px-6">
-            <View className="items-center py-16 bg-white rounded-3xl border border-stone-200 shadow-sm px-6">
-              <View className="w-14 h-14 rounded-full bg-brand-primary/10 items-center justify-center mb-4">
-                <Bell size={24} color="#FF6B35" />
-              </View>
-              <Text className="text-base font-display font-bold text-brand-text mb-1 text-center">
-                All Caught Up!
-              </Text>
-              <Text className="text-xs font-display text-brand-muted text-center max-w-xs leading-relaxed">
-                {"We'll notify you here when you win an auction, get outbid, or receive new chat messages."}
-              </Text>
-            </View>
-          </ScrollView>
-        ) : (
-          <View className="flex-1">
-            {alertsUnreadTotal > 0 && (
-              <View className="px-5 pt-3 pb-1 flex-row justify-between items-center bg-stone-50 border-b border-stone-100">
-                <Text className="text-[10px] font-display font-bold text-brand-muted uppercase tracking-wider">
-                  {alertsUnreadTotal} Unread alerts
+          ) : watchlistItems.length === 0 ? (
+            <ScrollView
+              className="flex-1 pt-12 px-6"
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#FF6B35']} tintColor="#FF6B35" />
+              }
+            >
+              <View className="items-center py-16 bg-white rounded-3xl border border-stone-200 shadow-sm px-6">
+                <View className="w-14 h-14 rounded-full bg-brand-primary/10 items-center justify-center mb-4">
+                  <Heart size={24} color="#FF6B35" />
+                </View>
+                <Text className="text-base font-display font-bold text-brand-text mb-1 text-center">
+                  Your Watchlist is Empty
                 </Text>
-                <Pressable onPress={handleMarkAllRead} className="flex-row items-center gap-1">
-                  <CheckCircle2 size={13} color="#FF6B35" />
-                  <Text className="text-xs font-display font-bold text-brand-primary">
-                    Mark all read
-                  </Text>
-                </Pressable>
+                <Text className="text-xs font-display text-brand-muted text-center max-w-xs leading-relaxed">
+                  {"Save auctions you're interested in by tapping the heart icon on any listing card."}
+                </Text>
               </View>
-            )}
-            
+            </ScrollView>
+          ) : (
             <FlatList
-              data={notifications}
+              data={watchlistItems}
               keyExtractor={(item) => item.id}
               contentContainerStyle={{ padding: 20 }}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#FF6B35']} tintColor="#FF6B35" />
+              }
               renderItem={({ item }) => (
-                <Pressable
-                  onPress={() => handleNotificationTap(item)}
-                  style={{
-                    borderLeftWidth: item.is_read ? 0 : 3,
-                    borderLeftColor: '#FF6B35',
-                  }}
-                  className={`flex-row items-start p-4 mb-3 border border-stone-200 rounded-3xl bg-white shadow-sm ${item.is_read ? 'opacity-85' : 'bg-brand-primary/5'}`}
-                >
-                  <View className="w-8 h-8 rounded-full bg-stone-100 items-center justify-center mr-3 mt-0.5">
-                    {renderNotificationIcon(item.type)}
-                  </View>
-
-                  <View className="flex-1">
-                    <View className="flex-row justify-between items-center mb-0.5">
-                      <Text className={`font-display text-xs ${item.is_read ? 'font-semibold text-brand-muted' : 'font-extrabold text-brand-text'}`}>
-                        {item.title}
-                      </Text>
-                      <Text className="text-[9px] font-display text-brand-muted">
-                        {formatLastMessageTime(item.created_at)}
-                      </Text>
-                    </View>
-                    <Text className="text-xs font-display text-brand-muted leading-relaxed">
-                      {item.body}
-                    </Text>
-                  </View>
-                </Pressable>
+                <AuctionCard
+                  id={item.id}
+                  title={item.title}
+                  current_price={item.current_price}
+                  ends_at={item.ends_at}
+                  starts_at={item.starts_at}
+                  category_name={categories.find((c) => c.id === item.category_id)?.name}
+                  status={item.status}
+                  bid_count={0}
+                  primary_image_url={item.primary_image_url}
+                />
               )}
             />
-          </View>
-        )
-      )}
+          )}
+        </View>
+
+        {/* Page 1: Inbox */}
+        <View style={{ width: screenWidth }} className="flex-1">
+          {loadingInbox ? (
+            <View className="flex-1 items-center justify-center">
+              <ActivityIndicator size="small" color="#FF6B35" />
+            </View>
+          ) : conversations.length === 0 ? (
+            <ScrollView
+              className="flex-1 pt-12 px-6"
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#FF6B35']} tintColor="#FF6B35" />
+              }
+            >
+              <View className="items-center py-16 bg-white rounded-3xl border border-stone-200 shadow-sm px-6">
+                <View className="w-14 h-14 rounded-full bg-brand-primary/10 items-center justify-center mb-4">
+                  <MessageSquare size={24} color="#FF6B35" />
+                </View>
+                <Text className="text-base font-display font-bold text-brand-text mb-1 text-center">
+                  No Conversations Yet
+                </Text>
+                <Text className="text-xs font-display text-brand-muted text-center max-w-xs leading-relaxed">
+                  Once an auction you participate in ends, you can chat with the seller or winner directly here.
+                </Text>
+              </View>
+            </ScrollView>
+          ) : (
+            <FlatList
+              data={conversations}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ padding: 20 }}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#FF6B35']} tintColor="#FF6B35" />
+              }
+              renderItem={({ item }) => {
+                const otherUser = user?.id === item.seller_id ? item.winner : item.seller;
+                const productTitle = item.auction?.title || 'Bhel Puri Item';
+                const latestMsgText = item.last_message?.content || 'Conversation started';
+                const lastMsgTime = item.last_message ? formatLastMessageTime(item.last_message.created_at) : '';
+                const imgUrl = item.auction?.primary_image_url;
+
+                return (
+                  <Pressable
+                    onPress={() => router.push(`/chat/${item.id}`)}
+                    className="flex-row items-center bg-white border border-stone-200 rounded-3xl p-4 mb-3 active:bg-stone-50 shadow-sm"
+                  >
+                    {/* Product Image Context badge */}
+                    <View className="w-12 h-12 rounded-2xl bg-stone-100 overflow-hidden mr-3.5 relative">
+                      {imgUrl ? (
+                        <Image source={{ uri: getAuctionImageUrl(imgUrl) }} className="w-full h-full" contentFit="cover" />
+                      ) : (
+                        <View className="w-full h-full items-center justify-center bg-stone-200">
+                          <MessageSquare size={16} color="#7F8C8D" />
+                        </View>
+                      )}
+                    </View>
+
+                    <View className="flex-1">
+                      <View className="flex-row justify-between items-baseline mb-0.5">
+                        <Text className="font-display font-extrabold text-brand-text text-sm" numberOfLines={1}>
+                          @{otherUser?.username || 'User'}
+                        </Text>
+                        {lastMsgTime ? (
+                          <Text className="text-[10px] font-display text-brand-muted font-medium">
+                            {lastMsgTime}
+                          </Text>
+                        ) : null}
+                      </View>
+                      
+                      <Text className="text-[10px] font-display font-semibold text-brand-primary mb-1 uppercase tracking-wider">
+                        {productTitle}
+                      </Text>
+
+                      <Text className={`text-xs font-display ${item.unread_count > 0 ? 'font-bold text-brand-text' : 'text-brand-muted'}`} numberOfLines={1}>
+                        {latestMsgText}
+                      </Text>
+                    </View>
+
+                    {item.unread_count > 0 && (
+                      <View className="w-5 h-5 rounded-full bg-brand-primary items-center justify-center ml-2">
+                        <Text className="text-[10px] font-display font-bold text-white">
+                          {item.unread_count}
+                        </Text>
+                      </View>
+                    )}
+                  </Pressable>
+                );
+              }}
+            />
+          )}
+        </View>
+
+        {/* Page 2: Alerts */}
+        <View style={{ width: screenWidth }} className="flex-1">
+          {loadingAlerts ? (
+            <View className="flex-1 items-center justify-center">
+              <ActivityIndicator size="small" color="#FF6B35" />
+            </View>
+          ) : notifications.length === 0 ? (
+            <ScrollView
+              className="flex-1 pt-12 px-6"
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#FF6B35']} tintColor="#FF6B35" />
+              }
+            >
+              <View className="items-center py-16 bg-white rounded-3xl border border-stone-200 shadow-sm px-6">
+                <View className="w-14 h-14 rounded-full bg-brand-primary/10 items-center justify-center mb-4">
+                  <Bell size={24} color="#FF6B35" />
+                </View>
+                <Text className="text-base font-display font-bold text-brand-text mb-1 text-center">
+                  All Caught Up!
+                </Text>
+                <Text className="text-xs font-display text-brand-muted text-center max-w-xs leading-relaxed">
+                  {"We'll notify you here when you win an auction, get outbid, or receive new chat messages."}
+                </Text>
+              </View>
+            </ScrollView>
+          ) : (
+            <View className="flex-1">
+              {alertsUnreadTotal > 0 && (
+                <View className="px-5 pt-3 pb-1 flex-row justify-between items-center bg-stone-50 border-b border-stone-100">
+                  <Text className="text-[10px] font-display font-bold text-brand-muted uppercase tracking-wider">
+                    {alertsUnreadTotal} Unread alerts
+                  </Text>
+                  <Pressable onPress={handleMarkAllRead} className="flex-row items-center gap-1">
+                    <CheckCircle2 size={13} color="#FF6B35" />
+                    <Text className="text-xs font-display font-bold text-brand-primary">
+                      Mark all read
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+              
+              <FlatList
+                data={notifications}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={{ padding: 20 }}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#FF6B35']} tintColor="#FF6B35" />
+                }
+                renderItem={({ item }) => (
+                  <Pressable
+                    onPress={() => handleNotificationTap(item)}
+                    style={{
+                      borderLeftWidth: item.is_read ? 0 : 3,
+                      borderLeftColor: '#FF6B35',
+                    }}
+                    className={`flex-row items-start p-4 mb-3 border border-stone-200 rounded-3xl bg-white shadow-sm ${item.is_read ? 'opacity-85' : 'bg-brand-primary/5'}`}
+                  >
+                    <View className="w-8 h-8 rounded-full bg-stone-100 items-center justify-center mr-3 mt-0.5">
+                      {renderNotificationIcon(item.type)}
+                    </View>
+
+                    <View className="flex-1">
+                      <View className="flex-row justify-between items-center mb-0.5">
+                        <Text className={`font-display text-xs ${item.is_read ? 'font-semibold text-brand-muted' : 'font-extrabold text-brand-text'}`}>
+                          {item.title}
+                        </Text>
+                        <Text className="text-[9px] font-display text-brand-muted">
+                          {formatLastMessageTime(item.created_at)}
+                        </Text>
+                      </View>
+                      <Text className="text-xs font-display text-brand-muted leading-relaxed">
+                        {item.body}
+                      </Text>
+                    </View>
+                  </Pressable>
+                )}
+              />
+            </View>
+          )}
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

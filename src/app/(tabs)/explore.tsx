@@ -9,7 +9,9 @@ import { getCategories } from '@/services/categoryService';
 import { getAuctions, FetchAuctionsParams } from '@/services/auctionService';
 import { Category, Auction } from '@/types/database.types';
 import { AuctionCard } from '@/components/ui/AuctionCard';
+import { SwipeableTabScreen } from '@/components/common/SwipeableTabScreen';
 import { finalizeExpiredAuctions } from '@/services/auctionFinalizationService';
+import { hapticLight, hapticSelection } from '@/utils/haptics';
 
 export default function ExploreScreen() {
   const params = useLocalSearchParams<{
@@ -197,6 +199,7 @@ export default function ExploreScreen() {
   };
 
   const handleClearAll = () => {
+    hapticLight();
     setSearchQuery('');
     setSelectedCategory(null);
     setSelectedStatus('all');
@@ -239,7 +242,8 @@ export default function ExploreScreen() {
   };
 
   return (
-    <SafeAreaView edges={["top", "left", "right"]} className="flex-1 bg-brand-background">
+    <SwipeableTabScreen currentTab="explore">
+      <SafeAreaView edges={["top", "left", "right"]} className="flex-1 bg-brand-background">
       {/* 1. Header Bar */}
       <View className="px-5 pt-3 pb-2 flex-row justify-between items-center border-b border-stone-200">
         <View>
@@ -296,7 +300,10 @@ export default function ExploreScreen() {
                 />
               </View>
               <Pressable
-                onPress={() => setShowFiltersModal(!showFiltersModal)}
+                onPress={() => {
+                  hapticLight();
+                  setShowFiltersModal(!showFiltersModal);
+                }}
                 style={{
                   backgroundColor: showFiltersModal ? '#FF6B35' : '#FFFFFF',
                   borderColor: showFiltersModal ? '#FF6B35' : '#E5E7EB',
@@ -310,7 +317,10 @@ export default function ExploreScreen() {
             {/* Mode Switcher: All | 🔄 Buy Requests (Reverse) | 🔨 Auctions (Forward) */}
             <View className="flex-row px-5 mb-3.5 gap-2">
               <Pressable
-                onPress={() => setAuctionTypeFilter('all')}
+                onPress={() => {
+                  hapticSelection();
+                  setAuctionTypeFilter('all');
+                }}
                 className={`py-2 px-3.5 rounded-xl border items-center justify-center ${
                   auctionTypeFilter === 'all'
                     ? 'bg-brand-text border-brand-text shadow-sm'
@@ -323,7 +333,10 @@ export default function ExploreScreen() {
               </Pressable>
 
               <Pressable
-                onPress={() => setAuctionTypeFilter('reverse')}
+                onPress={() => {
+                  hapticSelection();
+                  setAuctionTypeFilter('reverse');
+                }}
                 className={`flex-1 py-2 px-3 rounded-xl border items-center justify-center flex-row gap-1.5 ${
                   auctionTypeFilter === 'reverse'
                     ? 'bg-amber-600 border-amber-600 shadow-sm'
@@ -336,7 +349,10 @@ export default function ExploreScreen() {
               </Pressable>
 
               <Pressable
-                onPress={() => setAuctionTypeFilter('forward')}
+                onPress={() => {
+                  hapticSelection();
+                  setAuctionTypeFilter('forward');
+                }}
                 className={`flex-1 py-2 px-3 rounded-xl border items-center justify-center flex-row gap-1.5 ${
                   auctionTypeFilter === 'forward'
                     ? 'bg-brand-primary border-brand-primary shadow-sm'
@@ -357,7 +373,10 @@ export default function ExploreScreen() {
                 contentContainerStyle={{ paddingHorizontal: 20 }}
               >
                 <Pressable
-                  onPress={() => setSelectedCategory(null)}
+                  onPress={() => {
+                    hapticSelection();
+                    setSelectedCategory(null);
+                  }}
                   className={`flex-row items-center px-4 py-2 mr-3 rounded-full border shadow-sm ${
                     selectedCategory === null
                       ? 'bg-brand-primary border-brand-primary'
@@ -375,7 +394,10 @@ export default function ExploreScreen() {
                   return (
                     <Pressable
                       key={cat.id}
-                      onPress={() => setSelectedCategory(cat.slug)}
+                      onPress={() => {
+                        hapticSelection();
+                        setSelectedCategory(cat.slug);
+                      }}
                       className={`flex-row items-center px-4 py-2 mr-3 rounded-full border shadow-sm ${
                         isActive ? 'bg-brand-primary border-brand-primary' : 'bg-white border-stone-200'
                       }`}
@@ -411,7 +433,10 @@ export default function ExploreScreen() {
                       return (
                         <Pressable
                           key={item.value}
-                          onPress={() => setSelectedStatus(item.value)}
+                          onPress={() => {
+                            hapticSelection();
+                            setSelectedStatus(item.value);
+                          }}
                           className={`px-3 py-2.5 rounded-xl border items-center ${
                             isActive ? 'bg-brand-text border-brand-text' : 'bg-stone-50 border-stone-200'
                           }`}
@@ -443,7 +468,10 @@ export default function ExploreScreen() {
                       return (
                         <Pressable
                           key={item.value}
-                          onPress={() => setSortBy(item.value)}
+                          onPress={() => {
+                            hapticSelection();
+                            setSortBy(item.value);
+                          }}
                           className={`flex-row items-center px-3.5 py-2 rounded-xl border gap-1.5 ${
                             isActive ? 'bg-brand-primary/10 border-brand-primary' : 'bg-stone-50 border-stone-200'
                           }`}
@@ -518,7 +546,7 @@ export default function ExploreScreen() {
                   : "We couldn't find any listings matching your search criteria. Try removing filters or searching other keywords."}
               </Text>
             </View>
-          ) : null
+          ) : undefined
         }
         ListFooterComponent={
           loading ? (
@@ -529,13 +557,14 @@ export default function ExploreScreen() {
             <View className="py-6 items-center">
               <ActivityIndicator size="small" color="#FF6B35" />
             </View>
-          ) : null
+          ) : undefined
         }
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.4}
         refreshing={refreshing}
         onRefresh={handleRefresh}
       />
-    </SafeAreaView>
+      </SafeAreaView>
+    </SwipeableTabScreen>
   );
 }
