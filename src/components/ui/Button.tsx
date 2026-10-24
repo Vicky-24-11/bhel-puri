@@ -47,9 +47,15 @@ export const Button: React.FC<ButtonProps> = ({
 
   // Size configurations
   const sizeStyles = {
-    sm: 'px-4 py-2 text-sm h-10',
-    md: 'px-6 py-3.5 text-base h-12',
-    lg: 'px-8 py-4.5 text-lg h-14',
+    sm: 'px-4 h-10',
+    md: 'px-6 h-12',
+    lg: 'px-8 h-14',
+  };
+
+  const sizeTextStyles = {
+    sm: 'text-sm font-semibold',
+    md: 'text-base font-semibold',
+    lg: 'text-lg font-bold',
   };
 
   // Disable adjustments
@@ -80,7 +86,7 @@ export const Button: React.FC<ButtonProps> = ({
       ) : (
         <View className="flex-row items-center justify-center">
           {icon && iconPosition === 'left' && <View className="mr-2">{icon}</View>}
-          <Text className={`${textStyles[variant]} text-center`}>{label}</Text>
+          <Text className={`${textStyles[variant]} ${sizeTextStyles[size]} text-center`}>{label}</Text>
           {icon && iconPosition === 'right' && <View className="ml-2">{icon}</View>}
         </View>
       )}

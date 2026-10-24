@@ -240,7 +240,7 @@ export default function SellScreen() {
       setStep(1);
 
       // Redirect user to explore dashboard
-      router.replace("/(tabs)/explore" as any);
+      router.replace("/explore" as any);
     } catch (err: any) {
       Alert.alert(
         "Publishing Failed",
@@ -263,14 +263,14 @@ export default function SellScreen() {
 
   if (loadingCategories) {
     return (
-      <SafeAreaView className="flex-1 bg-brand-background justify-center items-center">
+      <SafeAreaView edges={["top", "left", "right"]} className="flex-1 bg-brand-background justify-center items-center">
         <ActivityIndicator size="large" color="#FF6B35" />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-brand-background">
+    <SafeAreaView edges={["top", "left", "right"]} className="flex-1 bg-brand-background">
       {/* Dynamic Header */}
       <View className="px-5 pt-3 pb-2 flex-row justify-between items-center border-b border-stone-200 bg-white">
         <View>

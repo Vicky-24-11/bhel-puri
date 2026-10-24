@@ -28,7 +28,7 @@ export default function NotFoundScreen() {
 
         <View className="w-full gap-2.5 mt-2">
           <Pressable
-            onPress={() => router.replace('/(tabs)/explore' as any)}
+            onPress={() => router.replace('/' as any)}
             className="w-full h-11 bg-brand-primary active:bg-brand-primary/95 rounded-2xl items-center justify-center flex-row gap-2"
           >
             <Home size={14} color="#FFFFFF" />
@@ -38,7 +38,7 @@ export default function NotFoundScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => router.replace('/(tabs)/explore' as any)}
+            onPress={() => router.replace('/explore' as any)}
             style={{ borderColor: 'rgba(255, 107, 53, 0.25)' }}
             className="w-full h-11 border rounded-2xl items-center justify-center flex-row gap-2 active:bg-stone-50"
           >

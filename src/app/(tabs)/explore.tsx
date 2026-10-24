@@ -239,15 +239,23 @@ export default function ExploreScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-brand-background">
+    <SafeAreaView edges={["top", "left", "right"]} className="flex-1 bg-brand-background">
       {/* 1. Header Bar */}
       <View className="px-5 pt-3 pb-2 flex-row justify-between items-center border-b border-stone-200">
         <View>
           <Text className="text-2xl font-display font-extrabold text-brand-text">
-            Explore Auctions
+            {auctionTypeFilter === 'reverse'
+              ? 'Buy Requests'
+              : auctionTypeFilter === 'forward'
+              ? 'Live Auctions'
+              : 'Explore Marketplace'}
           </Text>
           <Text className="text-xs font-display text-brand-muted mt-0.5">
-            Discover active live bidding wars
+            {auctionTypeFilter === 'reverse'
+              ? 'Find what buyers want and submit your best offer'
+              : auctionTypeFilter === 'forward'
+              ? 'Bid and win verified items across India'
+              : 'Discover live auctions & buyer requests across India'}
           </Text>
         </View>
         <Gavel size={24} color="#FF6B35" />
@@ -384,30 +392,6 @@ export default function ExploreScreen() {
               </ScrollView>
             </View>
 
-            {/* Auction Type Filter Row */}
-            <View className="px-5 mb-3 flex-row gap-2">
-              {([
-                { label: 'All Requests', value: 'all' },
-                { label: '🔨 Sell Auctions', value: 'forward' },
-                { label: '🔄 Buy Requests', value: 'reverse' },
-              ] as const).map((item) => {
-                const isActive = auctionTypeFilter === item.value;
-                return (
-                  <Pressable
-                    key={item.value}
-                    onPress={() => setAuctionTypeFilter(item.value)}
-                    className={`flex-1 py-2.5 rounded-2xl border items-center justify-center shadow-sm ${
-                      isActive ? 'bg-brand-primary border-brand-primary' : 'bg-white border-stone-200'
-                    }`}
-                  >
-                    <Text className={`text-xs font-display font-bold ${isActive ? 'text-white' : 'text-brand-text'}`}>
-                      {item.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
             {/* Detailed Filters Modal / Row Panel */}
             {showFiltersModal && (
               <View className="bg-white border-b border-stone-200 px-5 py-4 gap-4 mb-4">
@@ -522,10 +506,16 @@ export default function ExploreScreen() {
                 <Gavel size={32} color="#FF6B35" />
               </View>
               <Text className="text-lg font-display font-bold text-brand-text mb-1">
-                No Auctions Found
+                {auctionTypeFilter === 'reverse'
+                  ? 'No Buy Requests Found'
+                  : auctionTypeFilter === 'forward'
+                  ? 'No Live Auctions Found'
+                  : 'No Listings Found'}
               </Text>
               <Text className="text-sm font-display text-brand-muted text-center max-w-xs px-2 leading-relaxed">
-                {"We couldn't find any listings matching your search criteria. Try removing filters or searching other keywords."}
+                {auctionTypeFilter === 'reverse'
+                  ? "We couldn't find any buy requests matching your criteria. Be the first to post a request or adjust your filters."
+                  : "We couldn't find any listings matching your search criteria. Try removing filters or searching other keywords."}
               </Text>
             </View>
           ) : null

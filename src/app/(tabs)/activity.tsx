@@ -213,7 +213,7 @@ export default function ActivityScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-brand-background">
+    <SafeAreaView edges={["top", "left", "right"]} className="flex-1 bg-brand-background">
       {/* Dynamic Segment selectors */}
       <View className="px-5 pt-3 pb-2 border-b border-stone-200 bg-white">
         <View className="flex-row bg-stone-100 rounded-xl p-1 mb-1">

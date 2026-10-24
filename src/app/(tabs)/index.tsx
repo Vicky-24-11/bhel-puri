@@ -85,8 +85,8 @@ export default function HomeScreen() {
   const handleCategoryPress = (slug: string | null) => {
     setSelectedCategory(slug);
     // Push filters state directly to the Explore tab screen
-    router.push({
-      pathname: "/(tabs)/explore",
+    router.navigate({
+      pathname: "/explore",
       params: slug ? { category: slug } : undefined,
     } as any);
   };
@@ -114,7 +114,7 @@ export default function HomeScreen() {
   const displayName = profile?.full_name || profile?.username || "Guest";
 
   return (
-    <SafeAreaView className="flex-1 bg-brand-background ">
+    <SafeAreaView edges={["top", "left", "right"]} className="flex-1 bg-brand-background">
       {/* 1. Header Area */}
       <View className="px-5 pt-3 pb-2 flex-row justify-between items-center">
         <View>
@@ -129,13 +129,13 @@ export default function HomeScreen() {
         {/* Small Profile Avatar & Notifications */}
         <View className="flex-row items-center gap-4">
           <Pressable
-            onPress={() => router.push("/(tabs)/activity")}
+            onPress={() => router.navigate("/activity")}
             className="w-10 h-10 items-center justify-center bg-white border border-stone-200 rounded-full shadow-sm active:bg-stone-50"
           >
             <Bell size={20} color="#1A1A1A" />
           </Pressable>
           <Pressable
-            onPress={() => router.push("/(tabs)/profile")}
+            onPress={() => router.navigate("/profile")}
             style={{ borderColor: "rgba(255, 107, 53, 0.2)" }}
             className="w-10 h-10 rounded-full bg-brand-secondary items-center justify-center border shadow-sm active:opacity-90 overflow-hidden"
           >
@@ -153,8 +153,8 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} className="flex-1 ">
-        <View className="w-full max-w-5xl mx-auto px-5 pb-12 ">
+      <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
+        <View className="w-full max-w-5xl mx-auto px-5 pb-6">
           {/* 2. Personalised Greeting */}
           <View className="mb-4 mt-5">
             <Text className="text-sm font-display font-medium text-brand-muted">
@@ -168,7 +168,7 @@ export default function HomeScreen() {
           {/* 3. Search & Location Bar */}
           <View className="flex-col md:flex-row gap-3 mt-2 mb-6">
             {/* Search Input */}
-            <View className="flex-1 flex-row items-center bg-white border border-stone-200 rounded-2xl px-4 h-12 shadow-sm ">
+            <View className="w-full md:flex-1 flex-row items-center bg-white border border-stone-200 rounded-2xl px-4 h-12 shadow-sm">
               <LucideIcons.Search size={20} color="#7F8C8D" className="mr-3" />
               <TextInput
                 value={searchQuery}
@@ -176,12 +176,13 @@ export default function HomeScreen() {
                 placeholder="Search auctions..."
                 placeholderTextColor="#9CA3AF"
                 onSubmitEditing={() => {
-                  router.push({
-                    pathname: "/(tabs)/explore",
+                  router.navigate({
+                    pathname: "/explore",
                     params: { query: searchQuery },
                   } as any);
                 }}
                 className="flex-1 h-full text-base font-display text-brand-text"
+                style={{ paddingVertical: 0 }}
               />
             </View>
 
@@ -217,7 +218,7 @@ export default function HomeScreen() {
             </Text>
             <View className="flex-row items-center gap-3">
               <Pressable
-                onPress={() => router.push("/(tabs)/sell")}
+                onPress={() => router.navigate("/sell")}
                 className="bg-white px-4 py-2.5 rounded-full flex-row items-center gap-2 shadow-sm active:opacity-90"
               >
                 <RefreshCw size={14} color="#FF6B35" />
@@ -227,8 +228,8 @@ export default function HomeScreen() {
               </Pressable>
               <Pressable
                 onPress={() =>
-                  router.push({
-                    pathname: "/(tabs)/explore",
+                  router.navigate({
+                    pathname: "/explore",
                     params: { type: "reverse" },
                   } as any)
                 }
@@ -348,8 +349,8 @@ export default function HomeScreen() {
                     </View>
                     <Pressable
                       onPress={() =>
-                        router.push({
-                          pathname: "/(tabs)/explore",
+                        router.navigate({
+                          pathname: "/explore",
                           params: { type: "reverse" },
                         } as any)
                       }

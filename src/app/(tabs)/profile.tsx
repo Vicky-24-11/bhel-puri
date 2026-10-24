@@ -122,7 +122,7 @@ export default function ProfileScreen() {
   ];
 
   return (
-    <SafeAreaView className="flex-1 bg-brand-background">
+    <SafeAreaView edges={["top", "left", "right"]} className="flex-1 bg-brand-background">
       {/* Header */}
       <View className="px-5 pt-3 pb-2 flex-row justify-between items-center border-b border-stone-200">
         <View>
