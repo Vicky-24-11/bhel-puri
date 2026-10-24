@@ -35,6 +35,12 @@ export default function ExploreScreen() {
   const [debouncedMinPrice, setDebouncedMinPrice] = useState('');
   const [debouncedMaxPrice, setDebouncedMaxPrice] = useState('');
 
+  // Advanced filters state
+  const [selectedStatus, setSelectedStatus] = useState<'all' | 'live' | 'scheduled' | 'ending_soon'>('all');
+  const [auctionTypeFilter, setAuctionTypeFilter] = useState<'all' | 'forward' | 'reverse'>('all');
+  const [sortBy, setSortBy] = useState<FetchAuctionsParams['sortBy']>('newest');
+  const [showFiltersModal, setShowFiltersModal] = useState(false);
+
   // Sync category, search, and other routing parameters
   useEffect(() => {
     if (params.category !== undefined) {
@@ -62,12 +68,6 @@ export default function ExploreScreen() {
       setDebouncedMaxPrice(params.maxPrice || '');
     }
   }, [params.category, params.query, params.status, params.type, params.sort, params.minPrice, params.maxPrice]);
-  
-  // Advanced filters state
-  const [selectedStatus, setSelectedStatus] = useState<'all' | 'live' | 'scheduled' | 'ending_soon'>('all');
-  const [auctionTypeFilter, setAuctionTypeFilter] = useState<'all' | 'forward' | 'reverse'>('all');
-  const [sortBy, setSortBy] = useState<FetchAuctionsParams['sortBy']>('newest');
-  const [showFiltersModal, setShowFiltersModal] = useState(false);
 
   // Pagination and listings state
   const [listings, setListings] = useState<Auction[]>([]);
@@ -296,6 +296,48 @@ export default function ExploreScreen() {
                 className="w-12 h-12 border rounded-2xl items-center justify-center shadow-sm active:opacity-95"
               >
                 <SlidersHorizontal size={20} color={showFiltersModal ? '#FFFFFF' : '#1A1A1A'} />
+              </Pressable>
+            </View>
+
+            {/* Mode Switcher: All | 🔄 Buy Requests (Reverse) | 🔨 Auctions (Forward) */}
+            <View className="flex-row px-5 mb-3.5 gap-2">
+              <Pressable
+                onPress={() => setAuctionTypeFilter('all')}
+                className={`py-2 px-3.5 rounded-xl border items-center justify-center ${
+                  auctionTypeFilter === 'all'
+                    ? 'bg-brand-text border-brand-text shadow-sm'
+                    : 'bg-white border-stone-200'
+                }`}
+              >
+                <Text className={`text-xs font-display font-bold ${auctionTypeFilter === 'all' ? 'text-white' : 'text-brand-text'}`}>
+                  All
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setAuctionTypeFilter('reverse')}
+                className={`flex-1 py-2 px-3 rounded-xl border items-center justify-center flex-row gap-1.5 ${
+                  auctionTypeFilter === 'reverse'
+                    ? 'bg-amber-600 border-amber-600 shadow-sm'
+                    : 'bg-amber-50 border-amber-200'
+                }`}
+              >
+                <Text className={`text-xs font-display font-extrabold ${auctionTypeFilter === 'reverse' ? 'text-white' : 'text-amber-800'}`}>
+                  🔄 Buy Requests (Reverse)
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setAuctionTypeFilter('forward')}
+                className={`flex-1 py-2 px-3 rounded-xl border items-center justify-center flex-row gap-1.5 ${
+                  auctionTypeFilter === 'forward'
+                    ? 'bg-brand-primary border-brand-primary shadow-sm'
+                    : 'bg-white border-stone-200'
+                }`}
+              >
+                <Text className={`text-xs font-display font-bold ${auctionTypeFilter === 'forward' ? 'text-white' : 'text-brand-text'}`}>
+                  🔨 Auctions (Forward)
+                </Text>
               </Pressable>
             </View>
 

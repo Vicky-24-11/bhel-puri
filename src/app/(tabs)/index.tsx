@@ -1,7 +1,16 @@
 import { router } from "expo-router";
 import * as LucideIcons from "lucide-react-native";
-import { Bell, Clock, Compass, Flame, MapPin } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import {
+  ArrowRight,
+  Bell,
+  Clock,
+  Compass,
+  Flame,
+  MapPin,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react-native";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -28,6 +37,7 @@ export default function HomeScreen() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   // Live auction feeds states
+  const [reverseAuctions, setReverseAuctions] = useState<Auction[]>([]);
   const [recentAuctions, setRecentAuctions] = useState<Auction[]>([]);
   const [endingSoonAuctions, setEndingSoonAuctions] = useState<Auction[]>([]);
 
@@ -38,8 +48,14 @@ export default function HomeScreen() {
 
     const fetchHomeData = async () => {
       try {
-        const [cats, recent, ending] = await Promise.all([
+        const [cats, reverse, recent, ending] = await Promise.all([
           getCategories(),
+          getAuctions({
+            status: "live",
+            auctionType: "reverse",
+            sortBy: "newest",
+            limit: 6,
+          }),
           getAuctions({ status: "live", sortBy: "newest", limit: 6 }),
           getAuctions({ status: "live", sortBy: "ending_soon", limit: 6 }),
         ]);
@@ -47,6 +63,7 @@ export default function HomeScreen() {
         if (!active) return;
 
         setCategories(cats);
+        setReverseAuctions(reverse);
         setRecentAuctions(recent);
         setEndingSoonAuctions(ending);
       } catch (err) {
@@ -151,7 +168,7 @@ export default function HomeScreen() {
           {/* 3. Search & Location Bar */}
           <View className="flex-col md:flex-row gap-3 mt-2 mb-6">
             {/* Search Input */}
-            <View className="flex-1 flex-row items-center bg-white border border-stone-200 rounded-2xl px-4 h-12 shadow-sm">
+            <View className="flex-1 flex-row items-center bg-white border border-stone-200 rounded-2xl px-4 h-12 shadow-sm ">
               <LucideIcons.Search size={20} color="#7F8C8D" className="mr-3" />
               <TextInput
                 value={searchQuery}
@@ -180,6 +197,49 @@ export default function HomeScreen() {
                 </Text>
               </View>
             </Pressable>
+          </View>
+
+          {/* Hero Banner: Reverse Auction / Buy Request Callout */}
+          <View className="mb-6 p-5 bg-brand-primary rounded-3xl shadow-sm relative overflow-hidden">
+            <View className="flex-row items-center gap-1.5 mb-2">
+              <Sparkles size={16} color="#FFE66D" />
+              <Text className="text-xs font-display font-bold uppercase tracking-wider text-amber-200">
+                India{"'"}s #1 Reverse Bargain Marketplace
+              </Text>
+            </View>
+            <Text className="text-xl font-display font-extrabold text-white mb-1.5">
+              Post What You Want, Get Lowest Bids! 🎯
+            </Text>
+            <Text className="text-xs font-display text-white/90 leading-relaxed mb-4">
+              Need a phone, laptop, or gadget? Post your target budget. Verified
+              local sellers bid down against each other to give you the lowest
+              price. 100% Free, 0% platform fee.
+            </Text>
+            <View className="flex-row items-center gap-3">
+              <Pressable
+                onPress={() => router.push("/(tabs)/sell")}
+                className="bg-white px-4 py-2.5 rounded-full flex-row items-center gap-2 shadow-sm active:opacity-90"
+              >
+                <RefreshCw size={14} color="#FF6B35" />
+                <Text className="text-xs font-display font-bold text-brand-primary">
+                  Post a Buy Request
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: "/(tabs)/explore",
+                    params: { type: "reverse" },
+                  } as any)
+                }
+                className="bg-white/20 px-3.5 py-2.5 rounded-full flex-row items-center gap-1.5 active:bg-white/30"
+              >
+                <Text className="text-xs font-display font-bold text-white">
+                  Browse Requests
+                </Text>
+                <ArrowRight size={14} color="#FFFFFF" />
+              </Pressable>
+            </View>
           </View>
 
           {/* 4. Horizontal Categories Section */}
@@ -251,7 +311,9 @@ export default function HomeScreen() {
           </View>
 
           {/* 5. Feeds Loading / Listings Render */}
-          {recentAuctions.length === 0 && endingSoonAuctions.length === 0 ? (
+          {reverseAuctions.length === 0 &&
+          recentAuctions.length === 0 &&
+          endingSoonAuctions.length === 0 ? (
             <View className="items-center py-16 bg-white rounded-3xl border border-stone-200 shadow-sm mt-4 px-6">
               <View
                 style={{ backgroundColor: "rgba(255, 107, 53, 0.08)" }}
@@ -260,15 +322,71 @@ export default function HomeScreen() {
                 <Compass size={32} color="#FF6B35" />
               </View>
               <Text className="text-xl font-display font-extrabold text-brand-text mb-2 text-center">
-                Marketplace Coming Soon
+                Marketplace Ready
               </Text>
               <Text className="text-sm font-display text-brand-muted text-center max-w-xs leading-relaxed">
-                Be the first to start the bidding war! Go to the Sell tab and
-                create a listing to go live now.
+                Be the first to start the bargaining! Post a Buy Request to
+                invite bids, or list an item to auction it now.
               </Text>
             </View>
           ) : (
             <View>
+              {/* Dedicated Reverse Auctions Section */}
+              {reverseAuctions.length > 0 && (
+                <View className="mb-8">
+                  <View className="flex-row items-center justify-between mb-4">
+                    <View className="flex-row items-center gap-2">
+                      <RefreshCw size={20} color="#FF6B35" />
+                      <View>
+                        <Text className="text-xl font-display font-extrabold text-brand-text">
+                          Live Buy Requests 🔄
+                        </Text>
+                        <Text className="text-xs font-display text-brand-muted font-medium">
+                          Buyers waiting for offers • Sellers bid lowest
+                        </Text>
+                      </View>
+                    </View>
+                    <Pressable
+                      onPress={() =>
+                        router.push({
+                          pathname: "/(tabs)/explore",
+                          params: { type: "reverse" },
+                        } as any)
+                      }
+                      className="flex-row items-center gap-1 px-3 py-1.5 rounded-full bg-brand-primary/10 active:bg-brand-primary/20"
+                    >
+                      <Text className="text-xs font-display font-bold text-brand-primary">
+                        View All
+                      </Text>
+                      <ArrowRight size={14} color="#FF6B35" />
+                    </Pressable>
+                  </View>
+                  <View className="flex-row flex-wrap justify-between">
+                    {reverseAuctions.map((item) => (
+                      <View
+                        key={item.id}
+                        className="w-full sm:w-[48%] md:w-[31%] mb-2"
+                      >
+                        <AuctionCard
+                          id={item.id}
+                          title={item.title}
+                          current_price={item.current_price}
+                          ends_at={item.ends_at}
+                          starts_at={item.starts_at}
+                          category_name={
+                            categories.find((c) => c.id === item.category_id)
+                              ?.name
+                          }
+                          status={item.status}
+                          primary_image_url={item.primary_image_url}
+                          auction_type={item.auction_type}
+                        />
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
               {/* Ending Soon Section */}
               {endingSoonAuctions.length > 0 && (
                 <View className="mb-8">
@@ -296,6 +414,7 @@ export default function HomeScreen() {
                           }
                           status={item.status}
                           primary_image_url={item.primary_image_url}
+                          auction_type={item.auction_type}
                         />
                       </View>
                     ))}
@@ -330,6 +449,7 @@ export default function HomeScreen() {
                           }
                           status={item.status}
                           primary_image_url={item.primary_image_url}
+                          auction_type={item.auction_type}
                         />
                       </View>
                     ))}

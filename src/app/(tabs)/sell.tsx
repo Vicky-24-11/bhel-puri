@@ -38,9 +38,9 @@ export default function SellScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
 
-  // Listing configuration states
+  // Listing configuration states - default to reverse auction (Buy Request)
   const [auctionType, setAuctionType] = useState<"forward" | "reverse">(
-    "forward",
+    "reverse",
   );
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(
     null,
@@ -275,7 +275,7 @@ export default function SellScreen() {
       <View className="px-5 pt-3 pb-2 flex-row justify-between items-center border-b border-stone-200 bg-white">
         <View>
           <Text className="text-2xl font-display font-extrabold text-brand-text">
-            List an Item
+            {auctionType === "reverse" ? "Post a Buy Request" : "List an Item"}
           </Text>
           <Text className="text-xs font-display text-brand-muted mt-0.5">
             Step {step} of 6 —{" "}
@@ -310,12 +310,53 @@ export default function SellScreen() {
           {/* STEP 1: CHOOSE AUCTION TYPE */}
           {step === 1 && (
             <View className="gap-5">
-              <Text className="text-lg font-display font-bold text-brand-text">
-                What do you want to do?
-              </Text>
+              <View>
+                <Text className="text-lg font-display font-bold text-brand-text">
+                  What do you want to do?
+                </Text>
+                <Text className="text-xs font-display text-brand-muted mt-0.5">
+                  Choose how you want to transact on Bhel Puri
+                </Text>
+              </View>
 
               <View className="gap-4 mb-4">
-                {/* Option 1: Sell Something */}
+                {/* Option 1: Buy Request (Reverse Auction) - Primary Hero Choice */}
+                <Pressable
+                  onPress={() => setAuctionType("reverse")}
+                  style={
+                    auctionType === "reverse"
+                      ? {
+                          backgroundColor: "rgba(255, 107, 53, 0.08)",
+                          borderColor: "#FF6B35",
+                        }
+                      : { backgroundColor: "#FFFFFF", borderColor: "#E5E7EB" }
+                  }
+                  className="p-5 rounded-3xl border shadow-sm flex-row items-center gap-4 active:opacity-95 relative"
+                >
+                  <View className="w-12 h-12 rounded-2xl bg-amber-500/10 items-center justify-center">
+                    <Text className="text-2xl">🔄</Text>
+                  </View>
+                  <View className="flex-1">
+                    <View className="flex-row items-center gap-2 mb-1">
+                      <Text className="font-display text-base font-extrabold text-brand-text">
+                        Post a Buy Request
+                      </Text>
+                      <View className="px-2 py-0.5 rounded-full bg-amber-100 border border-amber-200">
+                        <Text className="text-[9px] font-display font-bold text-amber-800">
+                          ⭐ Recommended
+                        </Text>
+                      </View>
+                    </View>
+                    <Text className="font-display text-xs text-brand-muted leading-relaxed">
+                      Set your max budget & what you need. Local sellers compete with lower bids to give you the best deal!
+                    </Text>
+                  </View>
+                  {auctionType === "reverse" && (
+                    <Check size={20} color="#FF6B35" />
+                  )}
+                </Pressable>
+
+                {/* Option 2: Sell Something (Forward Auction) */}
                 <Pressable
                   onPress={() => setAuctionType("forward")}
                   style={
@@ -329,49 +370,18 @@ export default function SellScreen() {
                   className="p-5 rounded-3xl border shadow-sm flex-row items-center gap-4 active:opacity-95"
                 >
                   <View className="w-12 h-12 rounded-2xl bg-brand-primary/10 items-center justify-center">
-                    <Text className="text-xl">🔨</Text>
+                    <Text className="text-2xl">🔨</Text>
                   </View>
                   <View className="flex-1">
                     <Text className="font-display text-base font-bold text-brand-text mb-0.5">
-                      Sell Something
+                      Sell Something (Standard Auction)
                     </Text>
-                    <Text className="font-display text-xs text-brand-muted">
-                      Buyers compete and the highest bid wins. Best for selling
-                      items.
+                    <Text className="font-display text-xs text-brand-muted leading-relaxed">
+                      List an item you own. Buyers place higher bids, and the highest bid wins.
                     </Text>
                   </View>
                   {auctionType === "forward" && (
-                    <Check size={18} color="#FF6B35" />
-                  )}
-                </Pressable>
-
-                {/* Option 2: Buy Something */}
-                <Pressable
-                  onPress={() => setAuctionType("reverse")}
-                  style={
-                    auctionType === "reverse"
-                      ? {
-                          backgroundColor: "rgba(255, 107, 53, 0.08)",
-                          borderColor: "#FF6B35",
-                        }
-                      : { backgroundColor: "#FFFFFF", borderColor: "#E5E7EB" }
-                  }
-                  className="p-5 rounded-3xl border shadow-sm flex-row items-center gap-4 active:opacity-95"
-                >
-                  <View className="w-12 h-12 rounded-2xl bg-brand-primary/10 items-center justify-center">
-                    <Text className="text-xl">🔄</Text>
-                  </View>
-                  <View className="flex-1">
-                    <Text className="font-display text-base font-bold text-brand-text mb-0.5">
-                      Buy Request
-                    </Text>
-                    <Text className="font-display text-xs text-brand-muted">
-                      Sellers compete and the lowest offer wins. Best for
-                      sourcing items.
-                    </Text>
-                  </View>
-                  {auctionType === "reverse" && (
-                    <Check size={18} color="#FF6B35" />
+                    <Check size={20} color="#FF6B35" />
                   )}
                 </Pressable>
               </View>
