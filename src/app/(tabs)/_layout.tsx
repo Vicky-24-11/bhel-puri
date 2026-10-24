@@ -51,7 +51,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="sell"
         options={{
-          title: "Sell",
+          title: "Post",
           tabBarIcon: ({ color, size }) => (
             <PlusCircle color={color} size={size + 2} />
           ),

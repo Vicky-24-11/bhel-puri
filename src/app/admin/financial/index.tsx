@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, ActivityIndicator, Pressable, TextInput, Switch, Alert } from 'react-native';
-import { RefreshCw, Percent, ShieldCheck, DollarSign, ListFilter, Calendar, Shield } from 'lucide-react-native';
+import { RefreshCw, Percent, ShieldCheck, DollarSign, ListFilter, Calendar, Shield, CheckCircle2 } from 'lucide-react-native';
 import {
   getPlatformFeeConfig,
   getPlatformFeeConfigHistory,
@@ -317,6 +317,23 @@ export default function FinancialDashboardScreen() {
           <RefreshCw size={14} color="#FF6B35" className={refreshing ? 'animate-spin' : ''} />
           <Text className="text-brand-primary font-display font-bold text-xs">Refresh</Text>
         </Pressable>
+      </View>
+
+      {/* 100% Free Mode Banner */}
+      <View className="bg-emerald-50 border border-emerald-200 p-5 rounded-3xl mb-8 gap-2 shadow-sm">
+        <View className="flex-row items-center gap-3">
+          <View className="w-8 h-8 rounded-full bg-emerald-600 items-center justify-center">
+            <CheckCircle2 size={18} color="#FFFFFF" />
+          </View>
+          <View className="flex-1">
+            <Text className="text-sm font-display font-extrabold text-emerald-900">
+              Active Mode: 100% Free Marketplace (Peer-to-Peer)
+            </Text>
+            <Text className="text-[11px] font-display text-emerald-700 mt-0.5 leading-relaxed">
+              Online payment gateways and commission cuts are currently inactive for users. Buyers and sellers connect directly in chat and settle upon physical or courier handover with 0% platform fees.
+            </Text>
+          </View>
+        </View>
       </View>
 
       {/* Production Readiness Control Center */}

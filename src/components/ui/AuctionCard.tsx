@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, Animated, Alert } from 'react-native';
 import { Image } from 'expo-image';
 import { Heart, MapPin } from 'lucide-react-native';
@@ -52,7 +52,7 @@ export const AuctionCard: React.FC<AuctionCardProps> = ({
 }) => {
   const { user } = useAuth();
   const [isWatched, setIsWatched] = useState(false);
-  const heartScale = useRef(new Animated.Value(1)).current;
+  const [heartScale] = useState(() => new Animated.Value(1));
 
   // Resolve values supporting both legacy mock schemas and new production DB structures
   const price = current_price ?? currentHighestBid ?? 0;
